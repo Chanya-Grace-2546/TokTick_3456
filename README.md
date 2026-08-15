@@ -1,7 +1,5 @@
 # TokTickIT
 
-An IT service desk ticketing app — React + TypeScript frontend, Express + TypeScript backend, PostgreSQL via Prisma.
-
 ## Prerequisites
 
 - Node.js (v18+)
