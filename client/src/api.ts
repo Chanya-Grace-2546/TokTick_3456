@@ -21,5 +21,11 @@ export async function checkSystem(): Promise<SystemStatus> {
   if (!healthRes.ok) {
     throw new Error("Backend health check failed");
   }
-  return { online: true, categories: [] };
+  const categoriesRes = await fetch(`${API_URL}/api/categories`);
+  if (!categoriesRes.ok) {
+    throw new Error("Failed to load categories");
+  }
+  const categories: Category[] = await categoriesRes.json();
+
+  return { online: true, categories };
 }
