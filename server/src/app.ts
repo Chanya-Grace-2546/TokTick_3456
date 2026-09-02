@@ -41,4 +41,21 @@ app.get("/api/categories", async (_req: Request, res: Response) => {
     res.status(500).json({ error: "Failed to load categories" });
   }
 });
+// ---------------------------------------------------------------------------
+// Lab 2 Issue 2 — Development Requester Context
+// GET /api/requesters -> active Development Requesters only (BR-05).
+// This selector is a Lab 2 testing mechanism, not authentication.
+// ---------------------------------------------------------------------------
+app.get("/api/requesters", async (_req: Request, res: Response) => {
+  try {
+    const requesters = await getPrisma().developmentRequester.findMany({
+      where: { isActive: true },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, email: true },
+    });
+    res.status(200).json(requesters);
+  } catch {
+    res.status(500).json({ error: "Failed to load development requesters" });
+  }
+});
 export default app;
