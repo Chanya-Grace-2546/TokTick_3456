@@ -30,6 +30,26 @@ async function main() {
       create: requester,
     });
   }
+  // Lab 2 Issue 3 — Related Systems (handout §5.3: at least six).
+  // Upsert by name so re-running is idempotent.
+  const relatedSystemNames = [
+    "Email",
+    "Campus Wi-Fi",
+    "VPN",
+    "LEB2 App",
+    "Grade Submission App",
+    "Printer",
+    "Corporate Laptop",
+  ];
+
+  for (const name of relatedSystemNames) {
+    await prisma.relatedSystem.upsert({
+      where: { name },
+      update: {},
+      create: { name },
+    });
+  }
+  
 
   console.log("Seed complete: categories and development requesters.");
 }
