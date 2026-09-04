@@ -35,11 +35,86 @@ export interface Requester {
   name: string;
   email: string;
 }
+export async function fetchCategories(): Promise<Category[]> {
+  const res = await fetch(`${API_URL}/api/categories`);
+  if (!res.ok) {
+    throw new Error("Failed to load categories");
+  }
+  return res.json();
+}
 
 export async function fetchActiveRequesters(): Promise<Requester[]> {
   const res = await fetch(`${API_URL}/api/requesters`);
   if (!res.ok) {
     throw new Error("Failed to load development requesters");
+  }
+  return res.json();
+}
+// Lab 2 Issue 4 — Ticket Creation
+
+export interface RelatedSystem {
+  id: number;
+  name: string;
+}
+
+export async function fetchRelatedSystems(): Promise<RelatedSystem[]> {
+  const res = await fetch(`${API_URL}/api/related-systems`);
+  if (!res.ok) {
+    throw new Error("Failed to load related systems");
+  }
+  return res.json();
+}
+
+export type Priority = "LOW" | "MEDIUM" | "HIGH";
+
+export interface CreateTicketPayload {
+  requesterId: number;
+  categoryId: number;
+  relatedSystemId: number;
+  summary: string;
+  description: string;
+  requestedPriority: Priority;
+}
+
+export interface Ticket {
+  id: number;
+  ticketNumber: string;
+  requesterId: number;
+  categoryId: number;
+  relatedSystemId: number;
+  summary: string;
+  description: string;
+  requestedPriority: Priority;
+  itPriority: Priority | null;
+  status: string;
+  createdAt: string;
+}
+
+export interface FieldErrors {
+  [field: string]: string;
+}
+
+export class CreateTicketValidationError extends Error {
+  fields: FieldErrors;
+  constructor(fields: FieldErrors) {
+    super("VALIDATION_FAILED");
+    this.fields = fields;
+  }
+}
+
+export async function createTicket(payload: CreateTicketPayload): Promise<Ticket> {
+  const res = await fetch(`${API_URL}/api/tickets`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (res.status === 400) {
+    const body = await res.json();
+    throw new CreateTicketValidationError(body.fields ?? {});
+  }
+  if (!res.ok) {
+    throw new Error("Failed to create ticket");
   }
   return res.json();
 }
