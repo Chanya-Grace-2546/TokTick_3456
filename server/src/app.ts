@@ -79,6 +79,99 @@ app.get("/api/related-systems", async (_req: Request, res: Response) => {
 });
 
 // ---------------------------------------------------------------------------
+// Lab 2 Issue 5 — My Tickets
+// GET /api/tickets -> paginated, searchable, filterable, sortable list
+// scoped to requesterId (BR-08/BR-09 ownership). See api-spec.md §5.
+// ---------------------------------------------------------------------------
+const SORTABLE_FIELDS = ["ticketNumber", "createdAt", "updatedAt"] as const;
+
+app.get("/api/tickets", async (req: Request, res: Response) => {
+  const requesterId = Number(req.query.requesterId);
+  if (!req.query.requesterId || Number.isNaN(requesterId)) {
+    res.status(400).json({ error: "REQUESTER_ID_REQUIRED" });
+    return;
+  }
+
+  const {
+    search,
+    category,
+    requestedPriority,
+    itPriority,
+    currentStatus,
+  } = req.query as Record<string, string | undefined>;
+
+  // BR-12: default sort createdAt desc. Invalid values fall back silently.
+  const sortBy = SORTABLE_FIELDS.includes(req.query.sortBy as typeof SORTABLE_FIELDS[number])
+    ? (req.query.sortBy as typeof SORTABLE_FIELDS[number])
+    : "createdAt";
+  const sortDir = req.query.sortDir === "asc" ? "asc" : "desc";
+
+  // BR-13: page default 1, pageSize default 10 capped at 50. Invalid -> defaults.
+  const pageParsed = Number(req.query.page);
+  const page = Number.isInteger(pageParsed) && pageParsed > 0 ? pageParsed : 1;
+  const pageSizeParsed = Number(req.query.pageSize);
+  const pageSize =
+    Number.isInteger(pageSizeParsed) && pageSizeParsed > 0
+      ? Math.min(pageSizeParsed, 50)
+      : 10;
+
+  const where: Record<string, unknown> = { requesterId };
+
+  // BR-10: search matches Ticket Number or Summary, case-insensitive.
+  if (search) {
+    where.OR = [
+      { ticketNumber: { contains: search, mode: "insensitive" } },
+      { summary: { contains: search, mode: "insensitive" } },
+    ];
+  }
+  // BR-11: filters combine with AND (each added key is already AND'd by Prisma).
+  if (category) where.categoryId = Number(category);
+  if (requestedPriority) where.requestedPriority = requestedPriority;
+  if (itPriority) where.itPriority = itPriority;
+  if (currentStatus) where.status = currentStatus;
+
+  try {
+    const prisma = getPrisma();
+
+    const [rows, totalItems] = await Promise.all([
+      prisma.ticket.findMany({
+        where,
+        orderBy: { [sortBy]: sortDir },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: { category: { select: { name: true } } },
+      }),
+      prisma.ticket.count({ where }),
+    ]);
+
+    const items = rows.map((t) => ({
+      id: t.id,
+      ticketNumber: t.ticketNumber,
+      summary: t.summary,
+      category: t.category.name,
+      requestedPriority: t.requestedPriority,
+      itPriority: t.itPriority,
+      currentStatus: t.status,
+      createdAt: t.createdAt,
+      updatedAt: t.updatedAt,
+    }));
+
+    res.status(200).json({
+      items,
+      page,
+      pageSize,
+      totalItems,
+      totalPages: Math.max(1, Math.ceil(totalItems / pageSize)),
+      noResults: totalItems === 0,
+    });
+  } catch (err) {
+    console.error("Failed to list tickets:", err);
+    res.status(500).json({ error: "UNEXPECTED_ERROR" });
+  }
+});
+
+
+// ---------------------------------------------------------------------------
 // Lab 2 Issue 4 — Ticket Creation
 // POST /api/tickets -> validate, verify the Requester is active, generate
 // the official Ticket Number (BR-01), and create the Ticket.

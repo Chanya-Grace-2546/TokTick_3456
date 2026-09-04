@@ -118,3 +118,52 @@ export async function createTicket(payload: CreateTicketPayload): Promise<Ticket
   }
   return res.json();
 }
+
+// Lab 2 Issue 5 — My Tickets
+
+export interface TicketListItem {
+  id: number;
+  ticketNumber: string;
+  summary: string;
+  category: string;
+  requestedPriority: Priority;
+  itPriority: Priority | null;
+  currentStatus: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TicketListResponse {
+  items: TicketListItem[];
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+  noResults: boolean;
+}
+
+export interface TicketListParams {
+  requesterId: number;
+  search?: string;
+  category?: number;
+  requestedPriority?: Priority;
+  itPriority?: Priority;
+  currentStatus?: string;
+  sortBy?: "ticketNumber" | "createdAt" | "updatedAt";
+  sortDir?: "asc" | "desc";
+  page?: number;
+  pageSize?: number;
+}
+
+export async function fetchTickets(params: TicketListParams): Promise<TicketListResponse> {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== "") query.set(key, String(value));
+  });
+
+  const res = await fetch(`${API_URL}/api/tickets?${query.toString()}`);
+  if (!res.ok) {
+    throw new Error("Failed to load tickets");
+  }
+  return res.json();
+}
