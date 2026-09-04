@@ -4,10 +4,13 @@ import RequesterGuard from "./components/RequesterGuard.js";
 import RequesterSelection from "./pages/RequesterSelection.js";
 import HealthCheck from "./pages/HealthCheck.js";
 import TicketsPlaceholder from "./pages/TicketsPlaceholder.js";
+import CreateTicket from "./pages/CreateTicket.js";
+import AppShell from "./components/AppShell.js";
 
 export default function App() {
   return (
     <RequesterProvider>
+      <AppShell>
       <Routes>
         <Route path="/" element={<RequesterSelection />} />
         <Route
@@ -18,8 +21,17 @@ export default function App() {
             </RequesterGuard>
           }
         />
+        <Route
+          path="/tickets/new"
+          element={
+            <RequesterGuard>
+              <CreateTicket />
+            </RequesterGuard>
+          }
+        />
         <Route path="/dev-check" element={<HealthCheck />} />
       </Routes>
+      </AppShell>
     </RequesterProvider>
   );
 }
