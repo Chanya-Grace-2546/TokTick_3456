@@ -167,3 +167,99 @@ export async function fetchTickets(params: TicketListParams): Promise<TicketList
   }
   return res.json();
 }
+
+// Lab 2 Issue 6 — Ticket Detail + Attachments
+
+export interface AttachmentMeta {
+  id: number;
+  fileName: string;
+  sizeBytes: number;
+  mimeType?: string;
+  isRemoved: boolean;
+  removedAt: string | null;
+  removedReason: string | null;
+  createdAt: string;
+}
+
+export interface TicketDetailData {
+  id: number;
+  ticketNumber: string;
+  requesterId: number;
+  category: string;
+  relatedSystem: string;
+  summary: string;
+  description: string;
+  requestedPriority: Priority;
+  itPriority: Priority | null;
+  currentStatus: string;
+  createdAt: string;
+  updatedAt: string;
+  attachments: AttachmentMeta[];
+}
+
+export class TicketNotFoundError extends Error {}
+
+export async function fetchTicketDetail(
+  ticketId: number,
+  requesterId: number
+): Promise<TicketDetailData> {
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}?requesterId=${requesterId}`);
+  if (res.status === 404) {
+    throw new TicketNotFoundError("TICKET_NOT_FOUND");
+  }
+  if (!res.ok) {
+    throw new Error("Failed to load ticket");
+  }
+  return res.json();
+}
+
+export class AttachmentUploadError extends Error {
+  code: string;
+  constructor(code: string) {
+    super(code);
+    this.code = code;
+  }
+}
+
+export async function uploadAttachment(
+  ticketId: number,
+  requesterId: number,
+  file: File
+): Promise<AttachmentMeta> {
+  const formData = new FormData();
+  formData.append("requesterId", String(requesterId));
+  formData.append("file", file);
+
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/attachments`, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: "UPLOAD_FAILED" }));
+    throw new AttachmentUploadError(body.error ?? "UPLOAD_FAILED");
+  }
+  return res.json();
+}
+
+export function attachmentDownloadUrl(attachmentId: number, requesterId: number): string {
+  return `${API_URL}/api/attachments/${attachmentId}/download?requesterId=${requesterId}`;
+}
+
+export async function removeAttachment(
+  attachmentId: number,
+  requesterId: number,
+  reason: string
+): Promise<AttachmentMeta> {
+  const res = await fetch(`${API_URL}/api/attachments/${attachmentId}/remove`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ requesterId, reason }),
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: "REMOVE_FAILED" }));
+    throw new Error(body.error ?? "REMOVE_FAILED");
+  }
+  return res.json();
+}

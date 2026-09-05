@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { fetchTickets, TicketListItem, Priority } from "../api.js";
 import { useRequester } from "../context/RequesterContext.js";
 import { zenGreen } from "../theme.js";
@@ -20,11 +20,18 @@ const PRIORITY_BADGE: Record<Priority, string> = {
   HIGH: "#B3261E",
 };
 
+const SORT_LABELS: Record<SortField, string> = {
+  ticketNumber: "Ticket No.",
+  createdAt: "Created Date",
+  updatedAt: "Last Updated",
+};
+
 // Lab 2 Issue 5 — My Tickets
 // Reused this file from Issue 2's placeholder rather than creating a new
 // one, since it already owns the /tickets route.
 export default function TicketsPlaceholder() {
   const { requester } = useRequester();
+  const navigate = useNavigate();
 
   const [state, setState] = useState<ScreenState>("loading");
   const [items, setItems] = useState<TicketListItem[]>([]);
@@ -37,6 +44,7 @@ export default function TicketsPlaceholder() {
   const [sortBy, setSortBy] = useState<SortField>("createdAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [page, setPage] = useState(1);
+  const [sortMenuOpen, setSortMenuOpen] = useState(false);
 
   const hasActiveFilters = Boolean(search || requestedPriority || currentStatus);
 
@@ -165,6 +173,43 @@ export default function TicketsPlaceholder() {
         </div>
       </div>
 
+      <div className="d-flex justify-content-between align-items-center mb-3">
+        <div className="position-relative">
+          <button
+            type="button"
+            className="btn btn-sm btn-outline-secondary"
+            onClick={() => setSortMenuOpen((v) => !v)}
+            aria-expanded={sortMenuOpen}
+          >
+            Sort: {SORT_LABELS[sortBy]} ({sortDir === "asc" ? "▲" : "▼"})
+          </button>
+          {sortMenuOpen && (
+            <div
+              role="menu"
+              className="position-absolute start-0 mt-1 bg-white shadow rounded"
+              style={{ minWidth: 220, zIndex: 10 }}
+            >
+              {(Object.keys(SORT_LABELS) as SortField[]).map((field) => (
+                <button
+                  key={field}
+                  type="button"
+                  role="menuitem"
+                  className="btn btn-sm w-100 text-start d-flex justify-content-between"
+                  style={sortBy === field ? { backgroundColor: zenGreen.pale } : undefined}
+                  onClick={() => {
+                    toggleSort(field);
+                    setSortMenuOpen(false);
+                  }}
+                >
+                  <span>{SORT_LABELS[field]}</span>
+                  {sortBy === field && <span>{sortDir === "asc" ? "▲" : "▼"}</span>}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
       {state === "loading" && <p role="status">Loading tickets…</p>}
       {state === "error" && (
         <p role="alert" className="text-danger">
@@ -217,7 +262,11 @@ export default function TicketsPlaceholder() {
               </thead>
               <tbody>
                 {items.map((t) => (
-                  <tr key={t.id}>
+                  <tr
+                    key={t.id}
+                    style={{ cursor: "pointer" }}
+                    onClick={() => navigate(`/tickets/${t.id}`)}
+                  >
                     <td>{t.ticketNumber}</td>
                     <td>{t.summary}</td>
                     <td>{t.category}</td>

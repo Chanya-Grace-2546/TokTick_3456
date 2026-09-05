@@ -111,9 +111,9 @@ describe("CreateTicket", () => {
 
   it("disables Submit while the request is in flight", async () => {
     mockReferenceData();
-    let resolveCreate: (value: unknown) => void = () => {};
+    let resolveCreate: (value: api.Ticket) => void = () => {};
     vi.spyOn(api, "createTicket").mockReturnValue(
-      new Promise((resolve) => {
+      new Promise<api.Ticket>((resolve) => {
         resolveCreate = resolve;
       })
     );
@@ -141,5 +141,88 @@ describe("CreateTicket", () => {
     await waitFor(() => {
       expect(screen.getByText("TKT-2026-000102")).toBeInTheDocument();
     });
+  });
+
+  it("rejects a disallowed file type client-side before submitting", async () => {
+    mockReferenceData();
+    renderScreen();
+    await fillValidForm();
+
+    const badFile = new File(["hello"], "notes.txt", { type: "text/plain" });
+    fireEvent.change(screen.getByLabelText(/attachments/i), { target: { files: [badFile] } });
+
+    expect(
+      screen.getByText(/isn't an allowed type \(JPG, PNG, WEBP, or PDF only\)/i)
+    ).toBeInTheDocument();
+  });
+
+  it("uploads selected files after the Ticket is created", async () => {
+    mockReferenceData();
+    vi.spyOn(api, "createTicket").mockResolvedValue({
+      id: 42,
+      ticketNumber: "TKT-2026-000103",
+      requesterId: 1,
+      categoryId: 1,
+      relatedSystemId: 1,
+      summary: "Laptop battery drains quickly",
+      description: "Battery drains fast even when idle, started after last update.",
+      requestedPriority: "MEDIUM",
+      itPriority: null,
+      status: "NEW",
+      createdAt: new Date().toISOString(),
+    });
+    const uploadSpy = vi.spyOn(api, "uploadAttachment").mockResolvedValue({
+      id: 1,
+      fileName: "photo.png",
+      sizeBytes: 100,
+      isRemoved: false,
+      removedAt: null,
+      removedReason: null,
+      createdAt: new Date().toISOString(),
+    });
+
+    renderScreen();
+    await fillValidForm();
+
+    const file = new File(["x"], "photo.png", { type: "image/png" });
+    fireEvent.change(screen.getByLabelText(/attachments/i), { target: { files: [file] } });
+    fireEvent.click(screen.getByRole("button", { name: /submit ticket/i }));
+
+    await waitFor(() => {
+      expect(uploadSpy).toHaveBeenCalledWith(42, 1, file);
+    });
+    expect(screen.getByText("TKT-2026-000103")).toBeInTheDocument();
+  });
+
+  it("reports attachment failures but still shows the Ticket as saved (BR-21)", async () => {
+    mockReferenceData();
+    vi.spyOn(api, "createTicket").mockResolvedValue({
+      id: 42,
+      ticketNumber: "TKT-2026-000104",
+      requesterId: 1,
+      categoryId: 1,
+      relatedSystemId: 1,
+      summary: "Laptop battery drains quickly",
+      description: "Battery drains fast even when idle, started after last update.",
+      requestedPriority: "MEDIUM",
+      itPriority: null,
+      status: "NEW",
+      createdAt: new Date().toISOString(),
+    });
+    vi.spyOn(api, "uploadAttachment").mockRejectedValue(
+      new api.AttachmentUploadError("INVALID_FILE_TYPE")
+    );
+
+    renderScreen();
+    await fillValidForm();
+
+    const file = new File(["x"], "photo.png", { type: "image/png" });
+    fireEvent.change(screen.getByLabelText(/attachments/i), { target: { files: [file] } });
+    fireEvent.click(screen.getByRole("button", { name: /submit ticket/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("TKT-2026-000104")).toBeInTheDocument();
+    });
+    expect(screen.getByText(/1 attachment\(s\) failed to upload/i)).toBeInTheDocument();
   });
 });

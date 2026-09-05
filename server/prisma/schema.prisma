@@ -98,12 +98,42 @@ model Ticket {
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
 
-  // TODO(Lab 2 Issue 6): add `attachments Attachment[]` once the Attachment
+  // Lab 2 Issue 6 — Ticket Detail + Attachments
   // model exists — do not add it here, it will fail to compile until then.
+  attachments       Attachment[]
 
   // spec.md §7 — indexes supporting ownership checks, status filtering,
   // and category filtering on the My Tickets list (Issue 5).
+
   @@index([requesterId])
   @@index([status])
   @@index([categoryId])
+}
+// ---------------------------------------------------------------------------
+// Lab 2 Issue 6 — Ticket Detail + Attachments
+// BR-22 to BR-27: allowed types (JPG/JPEG, PNG, WEBP, PDF), 5MB max, 5
+// active attachments max per Ticket, soft-removal only (never hard delete).
+// ---------------------------------------------------------------------------
+model Attachment {
+  id             Int       @id @default(autoincrement())
+
+  ticketId       Int
+  ticket         Ticket    @relation(fields: [ticketId], references: [id])
+
+  // BR-24: original filename is display-only metadata; the file on disk
+  // uses a generated, collision-safe name (storedFileName).
+  fileName       String
+  storedFileName String    @unique
+  mimeType       String
+  sizeBytes      Int
+
+  createdAt      DateTime  @default(now())
+
+  // BR-26/BR-27: soft removal only — row is never physically deleted, and
+  // remains visible as metadata after removal, but blocks download/preview.
+  removedAt      DateTime?
+  removedReason  String?
+
+  @@index([ticketId])
+  @@index([removedAt])
 }
