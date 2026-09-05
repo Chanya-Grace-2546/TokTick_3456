@@ -24,6 +24,7 @@ datasource db {
 model Category {
   id        Int      @id @default(autoincrement())
   name      String   @unique
+  isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   tickets   Ticket[]
 }
@@ -64,8 +65,8 @@ enum TicketStatus {
 model RelatedSystem {
   id        Int      @id @default(autoincrement())
   name      String   @unique
+  isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
-
   tickets   Ticket[]
 }
 
@@ -91,7 +92,7 @@ model Ticket {
   requestedPriority Priority
 
   // BR-02: unset until IT Staff triage in a later sprint (out of scope here).
-  itPriority        Priority?
+  itPriority Priority @default(MEDIUM)
 
   status            TicketStatus  @default(NEW)
 
@@ -131,6 +132,7 @@ model Attachment {
 
   // BR-26/BR-27: soft removal only — row is never physically deleted, and
   // remains visible as metadata after removal, but blocks download/preview.
+  isRemoved      Boolean   @default(false)
   removedAt      DateTime?
   removedReason  String?
 

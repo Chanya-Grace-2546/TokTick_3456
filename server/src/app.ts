@@ -40,6 +40,7 @@ app.get("/api/categories", async (_req: Request, res: Response) => {
   try {
     const categories = await getPrisma().category.findMany({
       orderBy: { id: "asc" },
+      where: { isActive: true },
       select: { id: true, name: true },
     });
     res.status(200).json(categories);
@@ -74,6 +75,7 @@ app.get("/api/related-systems", async (_req: Request, res: Response) => {
   try {
     const relatedSystems = await getPrisma().relatedSystem.findMany({
       orderBy: { id: "asc" },
+      where: { isActive: true },
       select: { id: true, name: true },
     });
     res.status(200).json(relatedSystems);
@@ -285,16 +287,17 @@ app.get("/api/tickets/:id", async (req: Request, res: Response) => {
         category: { select: { name: true } },
         relatedSystem: { select: { name: true } },
         attachments: {
-          select: {
-            id: true,
-            fileName: true,
-            sizeBytes: true,
-            mimeType: true,
-            removedAt: true,
-            removedReason: true,
-            createdAt: true,
-          },
-        },
+  select: {
+    id: true,
+    fileName: true,
+    sizeBytes: true,
+    mimeType: true,
+    isRemoved: true,
+    removedAt: true,
+    removedReason: true,
+    createdAt: true,
+  },
+},
       },
     });
 
@@ -321,7 +324,7 @@ app.get("/api/tickets/:id", async (req: Request, res: Response) => {
         fileName: a.fileName,
         sizeBytes: a.sizeBytes,
         mimeType: a.mimeType,
-        isRemoved: a.removedAt !== null,
+        isRemoved: a.isRemoved,
         removedAt: a.removedAt,
         removedReason: a.removedReason,
         createdAt: a.createdAt,
@@ -361,7 +364,7 @@ app.get("/api/tickets/:id/attachments", async (req: Request, res: Response) => {
         id: a.id,
         fileName: a.fileName,
         sizeBytes: a.sizeBytes,
-        isRemoved: a.removedAt !== null,
+        isRemoved: a.isRemoved,
         removedAt: a.removedAt,
         removedReason: a.removedReason,
         createdAt: a.createdAt,
@@ -410,7 +413,7 @@ app.post(
 
       // BR-22: max 5 ACTIVE attachments per Ticket (removed ones don't count).
       const activeCount = await prisma.attachment.count({
-        where: { ticketId, removedAt: null },
+        where: { ticketId, isRemoved: false },
       });
       if (activeCount >= MAX_ACTIVE_ATTACHMENTS) {
         await cleanupAndRespond(400, { error: "MAX_ATTACHMENTS_REACHED" });
@@ -479,7 +482,7 @@ app.get("/api/attachments/:id/download", async (req: Request, res: Response) => 
     }
     // BR-27: a removed attachment cannot be downloaded, even though its
     // metadata is still visible elsewhere.
-    if (attachment.removedAt) {
+    if (attachment.isRemoved) {
       res.status(410).json({ error: "ATTACHMENT_REMOVED" });
       return;
     }
@@ -529,7 +532,11 @@ app.patch("/api/attachments/:id/remove", async (req: Request, res: Response) => 
 
     const updated = await prisma.attachment.update({
       where: { id: attachmentId },
-      data: { removedAt: new Date(), removedReason: reason.trim() },
+      data: {
+  isRemoved: true,
+  removedAt: new Date(),
+  removedReason: reason.trim(),
+},
     });
 
     res.status(200).json({
