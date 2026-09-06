@@ -128,6 +128,10 @@ See `docs/lab-02/api-spec.md` for full request/response shapes. Endpoint summary
 - **AC-13** Given the active Requester is changed via "Change Requester," when the switch completes, then My Tickets reloads to show only the newly selected Requester's tickets.
 - **AC-14** Given the reference-data API (Categories/Related Systems/Requesters) fails to load, when Create Ticket or the Requester Selector opens, then a safe failure state is shown instead of a blank or broken form.
 - **AC-15** Given the viewport is narrower than 768px, when any Lab 2 screen is viewed, then fields stack vertically, buttons remain touch-friendly, and no horizontal scrolling occurs.
+- **AC-16** Given a viewport between 768 px and 991 px, when any Lab 2 screen is viewed, then a two-column layout is used where practical, and Summary and Description receive sufficient width.
+
+- **AC-17** Given a viewport of 992 px or wider, when any Lab 2 screen is viewed, then the specified multi-column layout is used and content is centered with a sensible maximum width.
+
 
 ## 10. Definition of Done
 
