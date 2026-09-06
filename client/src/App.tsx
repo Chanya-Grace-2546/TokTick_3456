@@ -3,7 +3,7 @@ import { RequesterProvider } from "./context/RequesterContext.js";
 import RequesterGuard from "./components/RequesterGuard.js";
 import RequesterSelection from "./pages/RequesterSelection.js";
 import HealthCheck from "./pages/HealthCheck.js";
-import TicketsPlaceholder from "./pages/TicketsPlaceholder.js";
+import TicketsPlaceholder from "./pages/MyTickets.js";
 import CreateTicket from "./pages/CreateTicket.js";
 import TicketDetail from "./pages/TicketDetail.js";
 import AppShell from "./components/AppShell.js";
