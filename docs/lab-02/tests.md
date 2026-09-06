@@ -83,13 +83,17 @@ cd client && npx vitest run
 cd e2e && npx playwright test
 ```
 
-## 6. Final Results
+## 6. Current Integration Results
+
+These results were recorded on `lab2-staging` before the release merge to
+`main`. Final results will be rerun and recorded after the release PR is
+merged to `main`.
+
 - Backend (`server/tests/lab-02/`): 5 test files, all passing.
-- Frontend (`client/`): 34/34 tests passing across all `lab-02` test files.
-- E2E (`e2e/lab-02/requester-ticket-flow.spec.ts`): 3/3 passing (one per
-  viewport: desktop, tablet, mobile), producing 9 screenshots under
-  `artifacts/lab-02/screenshots/`.
-- Known gaps: 5 planned tests deferred rather than implemented — see §7.
+- Frontend (`client/`): 34/34 tests passing across all Lab 2 test files.
+- E2E (`e2e/lab-02/requester-ticket-flow.spec.ts`): 3/3 passing.
+
+Final test output from `main` will be added after the release merge.
 
 ## 7. Known Limitations or Deferred Tests
 - **API-06** (oversized-file rejection): multer's `limits.fileSize` enforces
