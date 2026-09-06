@@ -7,7 +7,8 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  url = env("DATABASE_URL")
+  
 }
 
 // ---------------------------------------------------------------------------
@@ -23,5 +24,118 @@ datasource db {
 model Category {
   id        Int      @id @default(autoincrement())
   name      String   @unique
+  isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
+  tickets   Ticket[]
+}
+//lab2 issue2
+model DevelopmentRequester {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  tickets   Ticket[]
+}
+
+// ---------------------------------------------------------------------------
+// Lab 2 Issue 3 — Ticket Database and Reference Data
+// Adds RelatedSystem (reference data) and Ticket (the core entity), plus
+// the Priority/TicketStatus enums. Attachment is intentionally NOT added
+// here — that belongs to Issue 6 (Ticket Detail + Attachments).
+// ---------------------------------------------------------------------------
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+// BR-02: a new Ticket always starts at NEW. The later values exist now so
+// Lab 3+ workflow features don't require another migration (spec.md §11).
+enum TicketStatus {
+  NEW
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+  CANCELLED
+}
+
+model RelatedSystem {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  tickets   Ticket[]
+}
+
+model Ticket {
+  id                Int           @id @default(autoincrement())
+
+  // BR-01: backend-generated, unique, human-readable (e.g. TKT-2026-000123).
+  // The generation logic itself is implemented in Issue 4 (Ticket Creation);
+  // this column just enforces uniqueness at the database level.
+  ticketNumber      String        @unique
+
+  requesterId       Int
+  requester         DevelopmentRequester @relation(fields: [requesterId], references: [id])
+
+  categoryId        Int
+  category          Category      @relation(fields: [categoryId], references: [id])
+
+  relatedSystemId   Int
+  relatedSystem     RelatedSystem @relation(fields: [relatedSystemId], references: [id])
+
+  summary           String
+  description       String
+  requestedPriority Priority
+
+  // BR-02: unset until IT Staff triage in a later sprint (out of scope here).
+  itPriority Priority @default(MEDIUM)
+
+  status            TicketStatus  @default(NEW)
+
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  // Lab 2 Issue 6 — Ticket Detail + Attachments
+  // model exists — do not add it here, it will fail to compile until then.
+  attachments       Attachment[]
+
+  // spec.md §7 — indexes supporting ownership checks, status filtering,
+  // and category filtering on the My Tickets list (Issue 5).
+
+  @@index([requesterId])
+  @@index([status])
+  @@index([categoryId])
+}
+// ---------------------------------------------------------------------------
+// Lab 2 Issue 6 — Ticket Detail + Attachments
+// BR-22 to BR-27: allowed types (JPG/JPEG, PNG, WEBP, PDF), 5MB max, 5
+// active attachments max per Ticket, soft-removal only (never hard delete).
+// ---------------------------------------------------------------------------
+model Attachment {
+  id             Int       @id @default(autoincrement())
+
+  ticketId       Int
+  ticket         Ticket    @relation(fields: [ticketId], references: [id])
+
+  // BR-24: original filename is display-only metadata; the file on disk
+  // uses a generated, collision-safe name (storedFileName).
+  fileName       String
+  storedFileName String    @unique
+  mimeType       String
+  sizeBytes      Int
+
+  createdAt      DateTime  @default(now())
+
+  // BR-26/BR-27: soft removal only — row is never physically deleted, and
+  // remains visible as metadata after removal, but blocks download/preview.
+  isRemoved      Boolean   @default(false)
+  removedAt      DateTime?
+  removedReason  String?
+
+  @@index([ticketId])
+  @@index([removedAt])
 }

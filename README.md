@@ -1,46 +1,177 @@
 # TokTickIT
 
-## Prerequisites
+TokTickIT is a ticket management system developed for Lab 2. The system allows requesters to select a requester profile, create tickets, view their tickets, view ticket details, and manage attachments.
 
-- Node.js (v18+)
-- PostgreSQL (locally installed and running)
+## Project Structure
 
-## Setup
+```text
+toktickit/
+├── client/                 # React + Vite frontend
+├── server/                 # Express + Prisma backend
+├── docs/                   # Lab documentation
+├── e2e/                    # Playwright E2E tests
+├── artifacts/              # E2E screenshots
+└── README.md
+```
 
-### 1. Install dependencies
+## Requirements
 
-cd client && npm install
-cd ../server && npm install
+* Node.js
+* npm
+* PostgreSQL
 
-### 2. Configure environment variables
+## Installation
 
-Copy the example env files and fill in your local values:
+Install the frontend dependencies:
 
-cp client/.env.example client/.env
-cp server/.env.example server/.env
+```bash
+cd client
+npm install
+```
 
-Edit server/.env so DATABASE_URL matches your local Postgres setup. Example:
+Install the backend dependencies:
 
-DATABASE_URL="postgresql://<your-username>@localhost:5432/toktickit?schema=public"
-PORT=3000
+```bash
+cd ../server
+npm install
+```
 
-### 3. Create the database
+Install the E2E test dependencies:
 
-createdb toktickit
+```bash
+cd ../e2e
+npm install
+```
 
-### 4. Verify Prisma can connect
+## Database Setup
 
+Make sure PostgreSQL is running and the database environment configuration is set correctly.
+
+Run Prisma migrations:
+
+```bash
 cd server
-npx prisma db pull
+npm run prisma:migrate
+```
 
-## Running the app
+Seed the database:
 
-In separate terminal tabs:
+```bash
+npm run prisma:seed
+```
 
-Backend (http://localhost:3000): cd server && npm run dev
-Frontend (http://localhost:5173): cd client && npm run dev
+## Running the Application
 
-## Running tests
+### Backend
 
-cd server && npm test
-cd client && npm test
+Open Terminal 1:
+
+```bash
+cd server
+npm run dev
+```
+
+### Frontend
+
+Open Terminal 2:
+
+```bash
+cd client
+npm run dev
+```
+
+## Running Tests
+
+### Backend Tests
+
+From the `server` directory:
+
+```bash
+npm test
+```
+
+### Frontend Tests
+
+From the `client` directory:
+
+```bash
+npm test
+```
+
+## End-to-End (E2E) Testing
+
+The E2E tests use Playwright to verify the complete requester ticket flow, including visual and responsive inspection.
+
+### Install E2E Dependencies
+
+From the repository root:
+
+```bash
+cd e2e
+npm install
+```
+
+Install the Playwright Chromium browser (one-time setup):
+
+```bash
+npx playwright install chromium
+```
+
+### Run the E2E Tests
+
+Make sure the backend and frontend are running first.
+
+**Terminal 1 — Backend:**
+
+```bash
+cd server
+npm run dev
+```
+
+**Terminal 2 — Frontend:**
+
+```bash
+cd client
+npm run dev
+```
+
+**Terminal 3 — E2E Tests:**
+
+```bash
+cd e2e
+npx playwright test
+```
+
+> **Note:** Do not use `npx vitest run` for E2E testing. E2E tests use Playwright.
+
+The E2E tests run across multiple viewport sizes:
+
+* Desktop
+* Tablet
+* Mobile
+
+The E2E flow verifies that a requester can:
+
+1. Select a development requester.
+2. Create a ticket.
+3. View the created ticket.
+4. Upload an attachment.
+5. Remove an attachment.
+6. Return to My Tickets and confirm that the ticket appears.
+
+## E2E Screenshots
+
+Screenshots generated during E2E testing are stored in:
+
+```text
+artifacts/lab-02/screenshots/
+├── create-ticket/
+├── ticket-detail/
+└── my-tickets/
+```
+
+Each section contains screenshots for:
+
+* `desktop.png`
+* `tablet.png`
+* `mobile.png`
