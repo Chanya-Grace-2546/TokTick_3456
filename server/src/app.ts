@@ -1,8 +1,12 @@
 import express, { Request, Response } from "express";
 import cors from "cors";
+import fs from "fs";
+import path from "path";
 import { getPrisma } from "./prisma.js";
 import { validateCreateTicket } from "./validateCreateTicket.js";
 import { createTicketWithGeneratedNumber } from "./ticketNumber.js";
+import { upload, UPLOADS_DIR } from "./attachmentUpload.js";
+const MAX_ACTIVE_ATTACHMENTS = 5;
 // getPrisma() is your lazy database handle. Call it INSIDE a route when you
 // need the DB (Issue 4). It is intentionally unused until then.
 
@@ -36,6 +40,7 @@ app.get("/api/categories", async (_req: Request, res: Response) => {
   try {
     const categories = await getPrisma().category.findMany({
       orderBy: { id: "asc" },
+      where: { isActive: true },
       select: { id: true, name: true },
     });
     res.status(200).json(categories);
@@ -70,6 +75,7 @@ app.get("/api/related-systems", async (_req: Request, res: Response) => {
   try {
     const relatedSystems = await getPrisma().relatedSystem.findMany({
       orderBy: { id: "asc" },
+      where: { isActive: true },
       select: { id: true, name: true },
     });
     res.status(200).json(relatedSystems);
@@ -256,5 +262,294 @@ app.post("/api/tickets", async (req: Request, res: Response) => {
     res.status(500).json({ error: "UNEXPECTED_ERROR" });
   }
 });
+
+// ---------------------------------------------------------------------------
+// Lab 2 Issue 6 — Ticket Detail + Attachments
+// ---------------------------------------------------------------------------
+
+// GET /api/tickets/:id -> one owned Ticket, plus its attachment metadata.
+// api-spec.md §6: requesterId required as query param for ownership check.
+// Not owned / doesn't exist -> same 404, never distinguished (BR-09).
+app.get("/api/tickets/:id", async (req: Request, res: Response) => {
+  const ticketId = Number(req.params.id);
+  const requesterId = Number(req.query.requesterId);
+
+  if (Number.isNaN(ticketId) || !req.query.requesterId || Number.isNaN(requesterId)) {
+    res.status(400).json({ error: "REQUESTER_ID_REQUIRED" });
+    return;
+  }
+
+  try {
+    const prisma = getPrisma();
+    const ticket = await prisma.ticket.findFirst({
+      where: { id: ticketId, requesterId },
+      include: {
+        category: { select: { name: true } },
+        relatedSystem: { select: { name: true } },
+        attachments: {
+  select: {
+    id: true,
+    fileName: true,
+    sizeBytes: true,
+    mimeType: true,
+    isRemoved: true,
+    removedAt: true,
+    removedReason: true,
+    createdAt: true,
+  },
+},
+      },
+    });
+
+    if (!ticket) {
+      res.status(404).json({ error: "TICKET_NOT_FOUND" });
+      return;
+    }
+
+    res.status(200).json({
+      id: ticket.id,
+      ticketNumber: ticket.ticketNumber,
+      requesterId: ticket.requesterId,
+      category: ticket.category.name,
+      relatedSystem: ticket.relatedSystem.name,
+      summary: ticket.summary,
+      description: ticket.description,
+      requestedPriority: ticket.requestedPriority,
+      itPriority: ticket.itPriority,
+      currentStatus: ticket.status,
+      createdAt: ticket.createdAt,
+      updatedAt: ticket.updatedAt,
+      attachments: ticket.attachments.map((a) => ({
+        id: a.id,
+        fileName: a.fileName,
+        sizeBytes: a.sizeBytes,
+        mimeType: a.mimeType,
+        isRemoved: a.isRemoved,
+        removedAt: a.removedAt,
+        removedReason: a.removedReason,
+        createdAt: a.createdAt,
+      })),
+    });
+  } catch (err) {
+    console.error("Failed to load ticket:", err);
+    res.status(500).json({ error: "UNEXPECTED_ERROR" });
+  }
+});
+
+// GET /api/tickets/:id/attachments -> attachment metadata only (active + removed).
+app.get("/api/tickets/:id/attachments", async (req: Request, res: Response) => {
+  const ticketId = Number(req.params.id);
+  const requesterId = Number(req.query.requesterId);
+
+  if (Number.isNaN(ticketId) || !req.query.requesterId || Number.isNaN(requesterId)) {
+    res.status(400).json({ error: "REQUESTER_ID_REQUIRED" });
+    return;
+  }
+
+  try {
+    const prisma = getPrisma();
+    const ticket = await prisma.ticket.findFirst({ where: { id: ticketId, requesterId } });
+    if (!ticket) {
+      res.status(404).json({ error: "TICKET_NOT_FOUND" });
+      return;
+    }
+
+    const attachments = await prisma.attachment.findMany({
+      where: { ticketId },
+      orderBy: { createdAt: "asc" },
+    });
+
+    res.status(200).json(
+      attachments.map((a) => ({
+        id: a.id,
+        fileName: a.fileName,
+        sizeBytes: a.sizeBytes,
+        isRemoved: a.isRemoved,
+        removedAt: a.removedAt,
+        removedReason: a.removedReason,
+        createdAt: a.createdAt,
+      }))
+    );
+  } catch (err) {
+    console.error("Failed to load attachments:", err);
+    res.status(500).json({ error: "UNEXPECTED_ERROR" });
+  }
+});
+
+// POST /api/tickets/:id/attachments -> upload an Attachment (multipart/form-data).
+// Form fields: file (binary), requesterId.
+app.post(
+  "/api/tickets/:id/attachments",
+  upload.single("file"),
+  async (req: Request, res: Response) => {
+    const ticketId = Number(req.params.id);
+    const requesterId = Number(req.body.requesterId);
+
+    // Clean up the file multer already wrote to disk if validation fails
+    // past this point, so rejected uploads don't leave orphan files.
+    async function cleanupAndRespond(status: number, body: unknown) {
+      if (req.file) {
+        await fs.promises.unlink(req.file.path).catch(() => {});
+      }
+      res.status(status).json(body);
+    }
+
+    if (Number.isNaN(ticketId) || !req.body.requesterId || Number.isNaN(requesterId)) {
+      await cleanupAndRespond(400, { error: "REQUESTER_ID_REQUIRED" });
+      return;
+    }
+    if (!req.file) {
+      await cleanupAndRespond(400, { error: "INVALID_FILE_TYPE" });
+      return;
+    }
+
+    try {
+      const prisma = getPrisma();
+      const ticket = await prisma.ticket.findFirst({ where: { id: ticketId, requesterId } });
+      if (!ticket) {
+        await cleanupAndRespond(404, { error: "TICKET_NOT_FOUND" });
+        return;
+      }
+
+      // BR-22: max 5 ACTIVE attachments per Ticket (removed ones don't count).
+      const activeCount = await prisma.attachment.count({
+        where: { ticketId, isRemoved: false },
+      });
+      if (activeCount >= MAX_ACTIVE_ATTACHMENTS) {
+        await cleanupAndRespond(400, { error: "MAX_ATTACHMENTS_REACHED" });
+        return;
+      }
+
+      const attachment = await prisma.attachment.create({
+        data: {
+          ticketId,
+          fileName: req.file.originalname,
+          storedFileName: req.file.filename,
+          mimeType: req.file.mimetype,
+          sizeBytes: req.file.size,
+        },
+      });
+
+      res.status(201).json({
+        id: attachment.id,
+        fileName: attachment.fileName,
+        sizeBytes: attachment.sizeBytes,
+        mimeType: attachment.mimeType,
+        isRemoved: false,
+        createdAt: attachment.createdAt,
+      });
+    } catch (err) {
+      console.error("Failed to save attachment:", err);
+      await cleanupAndRespond(500, { error: "UNEXPECTED_ERROR" });
+    }
+  }
+);
+
+// Multer errors (wrong type / too large) land here, not in the route handler.
+app.use((err: Error, req: Request, res: Response, next: (err?: Error) => void) => {
+  if (err.message === "INVALID_FILE_TYPE") {
+    res.status(400).json({ error: "INVALID_FILE_TYPE" });
+    return;
+  }
+  if (err.name === "MulterError" && (err as { code?: string }).code === "LIMIT_FILE_SIZE") {
+    res.status(400).json({ error: "FILE_TOO_LARGE" });
+    return;
+  }
+  next(err);
+});
+
+// GET /api/attachments/:id/download -> stream an active Attachment's bytes.
+app.get("/api/attachments/:id/download", async (req: Request, res: Response) => {
+  const attachmentId = Number(req.params.id);
+  const requesterId = Number(req.query.requesterId);
+
+  if (Number.isNaN(attachmentId) || !req.query.requesterId || Number.isNaN(requesterId)) {
+    res.status(400).json({ error: "REQUESTER_ID_REQUIRED" });
+    return;
+  }
+
+  try {
+    const prisma = getPrisma();
+    const attachment = await prisma.attachment.findUnique({
+      where: { id: attachmentId },
+      include: { ticket: { select: { requesterId: true } } },
+    });
+
+    // BR-09-style ownership check: not owned or doesn't exist -> same 404.
+    if (!attachment || attachment.ticket.requesterId !== requesterId) {
+      res.status(404).json({ error: "ATTACHMENT_NOT_FOUND" });
+      return;
+    }
+    // BR-27: a removed attachment cannot be downloaded, even though its
+    // metadata is still visible elsewhere.
+    if (attachment.isRemoved) {
+      res.status(410).json({ error: "ATTACHMENT_REMOVED" });
+      return;
+    }
+
+    const filePath = path.join(UPLOADS_DIR, attachment.storedFileName);
+    res.setHeader("Content-Type", attachment.mimeType);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${encodeURIComponent(attachment.fileName)}"`
+    );
+    fs.createReadStream(filePath).pipe(res);
+  } catch (err) {
+    console.error("Failed to download attachment:", err);
+    res.status(500).json({ error: "UNEXPECTED_ERROR" });
+  }
+});
+
+// PATCH /api/attachments/:id/remove -> soft-remove an Attachment (BR-26).
+app.patch("/api/attachments/:id/remove", async (req: Request, res: Response) => {
+  const attachmentId = Number(req.params.id);
+  const { requesterId, reason } = req.body as { requesterId?: number; reason?: string };
+
+  if (!requesterId || Number.isNaN(Number(requesterId))) {
+    res.status(400).json({ error: "REQUESTER_ID_REQUIRED" });
+    return;
+  }
+  if (!reason || !reason.trim()) {
+    res.status(400).json({ error: "REASON_REQUIRED" });
+    return;
+  }
+
+  try {
+    const prisma = getPrisma();
+    const attachment = await prisma.attachment.findUnique({
+      where: { id: attachmentId },
+      include: { ticket: { select: { requesterId: true } } },
+    });
+
+    if (!attachment || attachment.ticket.requesterId !== Number(requesterId)) {
+      res.status(404).json({ error: "ATTACHMENT_NOT_FOUND" });
+      return;
+    }
+    if (attachment.removedAt) {
+      res.status(409).json({ error: "ALREADY_REMOVED" });
+      return;
+    }
+
+    const updated = await prisma.attachment.update({
+      where: { id: attachmentId },
+      data: {
+  isRemoved: true,
+  removedAt: new Date(),
+  removedReason: reason.trim(),
+},
+    });
+
+    res.status(200).json({
+      id: updated.id,
+      isRemoved: true,
+      removedAt: updated.removedAt,
+      removedReason: updated.removedReason,
+    });
+  } catch (err) {
+    console.error("Failed to remove attachment:", err);
+    res.status(500).json({ error: "UNEXPECTED_ERROR" });
+  }
+});
+
 
 export default app;

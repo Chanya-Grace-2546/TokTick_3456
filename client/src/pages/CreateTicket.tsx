@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Category,
@@ -7,6 +7,8 @@ import {
   fetchCategories,
   fetchRelatedSystems,
   createTicket,
+  uploadAttachment,
+  AttachmentUploadError,
   CreateTicketValidationError,
   FieldErrors,
   Ticket,
@@ -24,12 +26,23 @@ const cardStyle: React.CSSProperties = {
   boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
 };
 
-// Lab 2 Issue 4 — Ticket Creation
-// Attachments are intentionally NOT part of this screen yet — the
-// Attachment model and its upload endpoint belong to Issue 6.
+const MAX_FILES = 5;
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB, BR-22
+const ALLOWED_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp", ".pdf"];
+
+function isAllowedFile(file: File): boolean {
+  const lower = file.name.toLowerCase();
+  return ALLOWED_EXTENSIONS.some((ext) => lower.endsWith(ext));
+}
+
+// Lab 2 Issue 4 + Issue 6 — Ticket Creation with Attachments
+// Flow: create the Ticket first, then upload any selected files to it.
+// If a file upload fails, the Ticket is still saved (BR-21) — failures are
+// reported so the Requester can retry from Ticket Detail instead.
 export default function CreateTicket() {
   const { requester } = useRequester();
   const navigate = useNavigate();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [relatedSystems, setRelatedSystems] = useState<RelatedSystem[]>([]);
@@ -40,11 +53,14 @@ export default function CreateTicket() {
   const [requestedPriority, setRequestedPriority] = useState<Priority | "">("");
   const [summary, setSummary] = useState("");
   const [description, setDescription] = useState("");
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [fileError, setFileError] = useState("");
 
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [submitState, setSubmitState] = useState<SubmitState>("idle");
   const [submitErrorMessage, setSubmitErrorMessage] = useState("");
   const [createdTicket, setCreatedTicket] = useState<Ticket | null>(null);
+  const [attachmentFailures, setAttachmentFailures] = useState<string[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -65,6 +81,38 @@ export default function CreateTicket() {
     };
   }, []);
 
+  function handleFilesSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const incoming = Array.from(e.target.files ?? []);
+    setFileError("");
+
+    if (selectedFiles.length + incoming.length > MAX_FILES) {
+      setFileError(`You can attach at most ${MAX_FILES} files.`);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
+    const invalid = incoming.find((f) => !isAllowedFile(f));
+    if (invalid) {
+      setFileError(`"${invalid.name}" isn't an allowed type (JPG, PNG, WEBP, or PDF only).`);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
+    const tooLarge = incoming.find((f) => f.size > MAX_FILE_SIZE);
+    if (tooLarge) {
+      setFileError(`"${tooLarge.name}" is too large — 5MB maximum.`);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
+    setSelectedFiles((prev) => [...prev, ...incoming]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  function removeSelectedFile(index: number) {
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!requester) return;
@@ -82,11 +130,25 @@ export default function CreateTicket() {
         description,
         requestedPriority: requestedPriority as Priority,
       });
+
+      // BR-21: Ticket is already saved at this point. Attachment upload
+      // failures below are reported but never roll back the Ticket.
+      const failures: string[] = [];
+      for (const file of selectedFiles) {
+        try {
+          await uploadAttachment(ticket.id, requester.id, file);
+        } catch (err) {
+          failures.push(
+            file.name + (err instanceof AttachmentUploadError ? ` (${err.code})` : "")
+          );
+        }
+      }
+
+      setAttachmentFailures(failures);
       setCreatedTicket(ticket);
       setSubmitState("success");
     } catch (err) {
-      // BR-19/BR-20: entered values are NEVER cleared on failure — we simply
-      // don't reset categoryId/relatedSystemId/summary/description here.
+      // BR-19/BR-20: entered values are NEVER cleared on failure.
       if (err instanceof CreateTicketValidationError) {
         setFieldErrors(err.fields);
         setSubmitState("idle");
@@ -112,13 +174,30 @@ export default function CreateTicket() {
           </p>
           <p className="mb-1">Ticket Date: {new Date(createdTicket.createdAt).toLocaleString()}</p>
           <p className="mb-3">Requester: {requester?.name}</p>
-          <button
-            className="btn btn-sm"
-            style={{ backgroundColor: zenGreen.primary, color: "white" }}
-            onClick={() => navigate("/tickets")}
-          >
-            Back to My Tickets
-          </button>
+
+          {attachmentFailures.length > 0 && (
+            <div className="alert alert-warning small">
+              Ticket was saved, but {attachmentFailures.length} attachment(s) failed to upload:{" "}
+              {attachmentFailures.join(", ")}. You can retry adding them from the ticket's detail
+              page.
+            </div>
+          )}
+
+          <div className="d-flex gap-2">
+            <button
+              className="btn btn-sm"
+              style={{ backgroundColor: zenGreen.primary, color: "white" }}
+              onClick={() => navigate(`/tickets/${createdTicket.id}`)}
+            >
+              View Ticket
+            </button>
+            <button
+              className="btn btn-sm btn-outline-secondary"
+              onClick={() => navigate("/tickets")}
+            >
+              Back to My Tickets
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -140,29 +219,26 @@ export default function CreateTicket() {
       {refState === "ready" && (
         <div className="p-4" style={cardStyle}>
           <form onSubmit={handleSubmit} noValidate>
-            {/* System-generated / read-only fields — handout §4.4 requires
-                Ticket Number, Ticket Date, and Requester to be shown, even
-                though they're not editable here. */}
             <div
               className="row g-3 mb-4 p-3"
               style={{ backgroundColor: zenGreen.readOnlyBg, borderRadius: 6 }}
             >
-              <div className="col-md-4">
+              <div className="col-12 col-md-6 col-lg-4">
                 <label className="form-label text-muted small mb-1">Ticket Number</label>
                 <div className="form-control-plaintext">Assigned after submission</div>
               </div>
-              <div className="col-md-4">
+              <div className="col-12 col-md-6 col-lg-4">
                 <label className="form-label text-muted small mb-1">Ticket Date</label>
                 <div className="form-control-plaintext">{new Date().toLocaleDateString()}</div>
               </div>
-              <div className="col-md-4">
+              <div className="col-12 col-md-6 col-lg-4">
                 <label className="form-label text-muted small mb-1">Requester</label>
                 <div className="form-control-plaintext">{requester?.name}</div>
               </div>
             </div>
 
             <div className="row g-3 mb-3">
-              <div className="col-md-4">
+              <div className="col-12 col-md-6 col-lg-4">
                 <label className="form-label" htmlFor="category">
                   Category <span className="text-danger">*</span>
                 </label>
@@ -186,7 +262,7 @@ export default function CreateTicket() {
                 )}
               </div>
 
-              <div className="col-md-4">
+              <div className="col-12 col-md-6 col-lg-4">
                 <label className="form-label" htmlFor="relatedSystem">
                   Related System <span className="text-danger">*</span>
                 </label>
@@ -210,7 +286,7 @@ export default function CreateTicket() {
                 )}
               </div>
 
-              <div className="col-md-4">
+              <div className="col-12 col-md-6 col-lg-4">
                 <label className="form-label" htmlFor="requestedPriority">
                   Requested Priority <span className="text-danger">*</span>
                 </label>
@@ -264,6 +340,45 @@ export default function CreateTicket() {
               />
               {fieldErrors.description && (
                 <div className="invalid-feedback d-block">{fieldErrors.description}</div>
+              )}
+            </div>
+
+            <div className="mb-4">
+              <label className="form-label" htmlFor="attachments">
+                Attachments (optional, up to {MAX_FILES}, JPG/PNG/WEBP/PDF, 5MB each)
+              </label>
+              <input
+                ref={fileInputRef}
+                id="attachments"
+                type="file"
+                className="form-control"
+                accept=".jpg,.jpeg,.png,.webp,.pdf"
+                multiple
+                onChange={handleFilesSelected}
+                disabled={selectedFiles.length >= MAX_FILES}
+              />
+              {fileError && <div className="text-danger small mt-1">{fileError}</div>}
+
+              {selectedFiles.length > 0 && (
+                <ul className="list-group mt-2">
+                  {selectedFiles.map((f, i) => (
+                    <li
+                      key={`${f.name}-${i}`}
+                      className="list-group-item d-flex justify-content-between align-items-center py-1"
+                    >
+                      <span className="small">
+                        {f.name} <span className="text-muted">({(f.size / 1024).toFixed(0)} KB)</span>
+                      </span>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-danger py-0"
+                        onClick={() => removeSelectedFile(i)}
+                      >
+                        Remove
+                      </button>
+                    </li>
+                  ))}
+                </ul>
               )}
             </div>
 
