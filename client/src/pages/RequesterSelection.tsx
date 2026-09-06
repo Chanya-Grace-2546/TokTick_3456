@@ -15,9 +15,11 @@ export default function RequesterSelection() {
   useEffect(() => {
     let cancelled = false;
 
+    
     fetchActiveRequesters()
       .then((data) => {
         if (cancelled) return;
+
         if (data.length === 0) {
           setState("empty");
         } else {
@@ -28,11 +30,16 @@ export default function RequesterSelection() {
       .catch(() => {
         if (!cancelled) setState("error");
       });
+  
 
     return () => {
       cancelled = true;
     };
   }, []);
+
+  const selectedRequester = requesters.find(
+  (requester) => String(requester.id) === selectedId
+);
 
   function handleContinue() {
     const chosen = requesters.find((r) => String(r.id) === selectedId);
@@ -94,6 +101,22 @@ export default function RequesterSelection() {
               ))}
             </select>
           </div>
+
+          {selectedRequester && (
+  <div className="card mb-3">
+    <div className="card-body">
+      <h3 className="h6 mb-3">Selected Requester</h3>
+
+      <p className="mb-1">
+        <strong>Name:</strong> {selectedRequester.name}
+      </p>
+
+      <p className="mb-1">
+        <strong>Email:</strong> {selectedRequester.email}
+      </p>
+    </div>
+  </div>
+)}
 
 
           <button
