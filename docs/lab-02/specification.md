@@ -135,20 +135,22 @@ See `docs/lab-02/api-spec.md` for full request/response shapes. Endpoint summary
 
 ## 10. Definition of Done
 
-### Product Completion
-- All Functional Requirements and Business Rules above are implemented.
-- Every Acceptance Criterion (AC-01–AC-15) has passing, traceable automated test evidence (see `tests.md`).
-- No required test is skipped, disabled, or commented out on `main`.
-- Create Ticket, My Tickets, Ticket Detail, and Attachment screens conform to `ui-spec.md` and the Zen Green tokens.
-- API responses conform to `api-spec.md`, including status codes and error shapes.
-- Success, validation-failure, API-failure, empty, and no-results states are all implemented and demonstrably correct.
-- README setup/test-run instructions are current and accurate on `main`.
+### 10.1 Product Completion
 
-### Course Delivery
-- Work was tracked via GitHub Issues on the Backlog→Specified→Started→PR Review→Fixing→Done board.
-- Each Issue was implemented on its own feature branch, merged into `lab2-staging` via a peer-reviewed Pull Request.
-- One release Pull Request merged `lab2-staging` into `main` after integration testing.
-- `reviewer.md`, `ai-use.md`, and this specification exist in the final `main` branch.
+1. All Functional Requirements and Business Rules above are implemented.
+2. Every Acceptance Criterion (AC-01–AC-17) has passing, traceable automated test evidence (see `tests.md`).
+3. No required test is skipped, disabled, or commented out on `main`.
+4. Create Ticket, My Tickets, Ticket Detail, and Attachment screens conform to `ui-spec.md` and the Zen Green tokens.
+5. API responses conform to `api-spec.md`, including status codes and error shapes.
+6. Success, validation-failure, API-failure, empty, and no-results states are all implemented and demonstrably correct.
+7. README setup/test-run instructions are current and accurate on `main`.
+
+### 10.2 Course Delivery
+
+1. Work was tracked via GitHub Issues on the Backlog→Specified→Started→PR Review→Fixing→Done board.
+2. Each Issue was implemented on its own feature branch, merged into `lab2-staging` via a peer-reviewed Pull Request.
+3. One release Pull Request merged `lab2-staging` into `main` after integration testing.
+4. `reviewer.md`, `ai-use.md`, and this specification exist in the final `main` branch.
 
 ## 11. Assumptions and Decisions
 - Requested Priority values are `LOW` / `MEDIUM` / `HIGH`; IT Priority uses the same enum but defaults to `MEDIUM` and is not editable by the Requester in Lab 2 (IT Staff workflow is out of scope).
