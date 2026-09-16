@@ -9,20 +9,39 @@ describe("GET /api/tickets", () => {
   let categoryId: number;
   let relatedSystemId: number;
 
+  const testPasswordHash = "test-password-hash";
+
   beforeAll(async () => {
     const prisma = getPrisma();
 
-    const a = await prisma.developmentRequester.create({
-      data: { name: "My Tickets A", email: "mytickets.a@example.com", isActive: true },
+    const a = await prisma.user.create({
+      data: {
+        name: "My Tickets A",
+        email: "mytickets.a@example.com",
+        passwordHash: testPasswordHash,
+        role: "REQUESTER",
+        isActive: true,
+        mustChangePassword: false,
+      },
     });
-    const b = await prisma.developmentRequester.create({
-      data: { name: "My Tickets B", email: "mytickets.b@example.com", isActive: true },
+
+    const b = await prisma.user.create({
+      data: {
+        name: "My Tickets B",
+        email: "mytickets.b@example.com",
+        passwordHash: testPasswordHash,
+        role: "REQUESTER",
+        isActive: true,
+        mustChangePassword: false,
+      },
     });
+
     const category = await prisma.category.upsert({
       where: { name: "Hardware" },
       update: {},
       create: { name: "Hardware" },
     });
+
     const relatedSystem = await prisma.relatedSystem.upsert({
       where: { name: "Corporate Laptop" },
       update: {},
@@ -45,6 +64,7 @@ describe("GET /api/tickets", () => {
           summary: "Laptop battery drains quickly",
           description: "Battery drains fast even when idle.",
           requestedPriority: "HIGH",
+          itPriority: "HIGH",
           status: "NEW",
         },
         {
@@ -55,6 +75,7 @@ describe("GET /api/tickets", () => {
           summary: "Printer offline",
           description: "Printer shows offline intermittently.",
           requestedPriority: "MEDIUM",
+          itPriority: "MEDIUM",
           status: "NEW",
         },
         {
@@ -65,6 +86,7 @@ describe("GET /api/tickets", () => {
           summary: "VPN keeps disconnecting",
           description: "VPN drops every few minutes on wifi.",
           requestedPriority: "MEDIUM",
+          itPriority: "MEDIUM",
           status: "NEW",
         },
         {
@@ -75,6 +97,7 @@ describe("GET /api/tickets", () => {
           summary: "Requester B's own ticket",
           description: "Should never appear in A's list.",
           requestedPriority: "LOW",
+          itPriority: "LOW",
           status: "NEW",
         },
       ],
@@ -83,34 +106,92 @@ describe("GET /api/tickets", () => {
 
   afterAll(async () => {
     const prisma = getPrisma();
-    await prisma.ticket.deleteMany({
-      where: { requesterId: { in: [requesterAId, requesterBId] } },
+
+    const tickets = await prisma.ticket.findMany({
+      where: {
+        requesterId: {
+          in: [requesterAId, requesterBId],
+        },
+      },
+      select: {
+        id: true,
+      },
     });
-    await prisma.developmentRequester.deleteMany({
-      where: { id: { in: [requesterAId, requesterBId] } },
+
+    const ticketIds = tickets.map((ticket) => ticket.id);
+
+    if (ticketIds.length > 0) {
+      await prisma.publicComment.deleteMany({
+        where: {
+          ticketId: {
+            in: ticketIds,
+          },
+        },
+      });
+
+      await prisma.internalNote.deleteMany({
+        where: {
+          ticketId: {
+            in: ticketIds,
+          },
+        },
+      });
+
+      await prisma.attachment.deleteMany({
+        where: {
+          ticketId: {
+            in: ticketIds,
+          },
+        },
+      });
+
+      await prisma.ticket.deleteMany({
+        where: {
+          id: {
+            in: ticketIds,
+          },
+        },
+      });
+    }
+
+    await prisma.user.deleteMany({
+      where: {
+        id: {
+          in: [requesterAId, requesterBId],
+        },
+      },
     });
   });
 
   it("requires requesterId", async () => {
     const res = await request(app).get("/api/tickets");
+
     expect(res.status).toBe(400);
     expect(res.body.error).toBe("REQUESTER_ID_REQUIRED");
   });
 
   // BR-08/BR-09 ownership scoping
   it("only returns the given requester's own tickets", async () => {
-    const res = await request(app).get(`/api/tickets?requesterId=${requesterAId}`);
+    const res = await request(app).get(
+      `/api/tickets?requesterId=${requesterAId}`
+    );
 
     expect(res.status).toBe(200);
     expect(res.body.totalItems).toBe(3);
-    expect(res.body.items.every((t: { summary: string }) => t.summary !== "Requester B's own ticket")).toBe(
-      true
-    );
+
+    expect(
+      res.body.items.every(
+        (t: { summary: string }) =>
+          t.summary !== "Requester B's own ticket"
+      )
+    ).toBe(true);
   });
 
   // BR-10 search
   it("search matches summary (case-insensitive)", async () => {
-    const res = await request(app).get(`/api/tickets?requesterId=${requesterAId}&search=printer`);
+    const res = await request(app).get(
+      `/api/tickets?requesterId=${requesterAId}&search=printer`
+    );
 
     expect(res.body.totalItems).toBe(1);
     expect(res.body.items[0].summary).toBe("Printer offline");
@@ -131,13 +212,18 @@ describe("GET /api/tickets", () => {
       `/api/tickets?requesterId=${requesterAId}&sortBy=ticketNumber&sortDir=asc`
     );
 
-    const numbers = res.body.items.map((t: { ticketNumber: string }) => t.ticketNumber);
+    const numbers = res.body.items.map(
+      (t: { ticketNumber: string }) => t.ticketNumber
+    );
+
     expect(numbers).toEqual([...numbers].sort());
   });
 
   // BR-13 pagination
   it("paginates with the given pageSize", async () => {
-    const res = await request(app).get(`/api/tickets?requesterId=${requesterAId}&pageSize=2&page=1`);
+    const res = await request(app).get(
+      `/api/tickets?requesterId=${requesterAId}&pageSize=2&page=1`
+    );
 
     expect(res.body.items).toHaveLength(2);
     expect(res.body.totalItems).toBe(3);
