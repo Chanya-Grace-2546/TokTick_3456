@@ -8,22 +8,30 @@ describe("Ticket Detail API", () => {
   let requesterBId: number;
   let ticketId: number;
 
+  const testPasswordHash = "test-password-hash";
+
   beforeAll(async () => {
     const prisma = getPrisma();
 
-    const a = await prisma.developmentRequester.create({
+    const a = await prisma.user.create({
       data: {
         name: "Ticket Detail Test A",
         email: "ticket.detail.a@example.com",
+        passwordHash: testPasswordHash,
+        role: "REQUESTER",
         isActive: true,
+        mustChangePassword: false,
       },
     });
 
-    const b = await prisma.developmentRequester.create({
+    const b = await prisma.user.create({
       data: {
         name: "Ticket Detail Test B",
         email: "ticket.detail.b@example.com",
+        passwordHash: testPasswordHash,
+        role: "REQUESTER",
         isActive: true,
+        mustChangePassword: false,
       },
     });
 
@@ -48,6 +56,7 @@ describe("Ticket Detail API", () => {
         summary: "Ticket detail test ticket",
         description: "Used to test ticket detail access.",
         requestedPriority: "MEDIUM",
+        itPriority: "MEDIUM",
         status: "NEW",
       },
     });
@@ -60,6 +69,14 @@ describe("Ticket Detail API", () => {
   afterAll(async () => {
     const prisma = getPrisma();
 
+    await prisma.publicComment.deleteMany({
+      where: { ticketId },
+    });
+
+    await prisma.internalNote.deleteMany({
+      where: { ticketId },
+    });
+
     await prisma.attachment.deleteMany({
       where: { ticketId },
     });
@@ -68,9 +85,11 @@ describe("Ticket Detail API", () => {
       where: { id: ticketId },
     });
 
-    await prisma.developmentRequester.deleteMany({
+    await prisma.user.deleteMany({
       where: {
-        id: { in: [requesterAId, requesterBId] },
+        id: {
+          in: [requesterAId, requesterBId],
+        },
       },
     });
   });

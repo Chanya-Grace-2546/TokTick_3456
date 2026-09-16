@@ -55,11 +55,20 @@ app.get("/api/categories", async (_req: Request, res: Response) => {
 // ---------------------------------------------------------------------------
 app.get("/api/requesters", async (_req: Request, res: Response) => {
   try {
-    const requesters = await getPrisma().developmentRequester.findMany({
-      where: { isActive: true },
-      orderBy: { name: "asc" },
-      select: { id: true, name: true, email: true },
-    });
+    const requesters = await getPrisma().user.findMany({
+  where: {
+    isActive: true,
+    role: "REQUESTER",
+  },
+  select: {
+    id: true,
+    name: true,
+    email: true,
+  },
+  orderBy: {
+    name: "asc",
+  },
+});
     res.status(200).json(requesters);
   } catch {
     res.status(500).json({ error: "Failed to load development requesters" });
@@ -204,10 +213,15 @@ app.post("/api/tickets", async (req: Request, res: Response) => {
 
   try {
     // BR-05: only an active Development Requester may create tickets.
-    const requester = await prisma.developmentRequester.findUnique({
-      where: { id: requesterId },
-      select: { isActive: true },
-    });
+    const requester = await prisma.user.findFirst({
+  where: {
+    id: requesterId,
+    role: "REQUESTER",
+  },
+  select: {
+    isActive: true,
+  },
+});
     if (!requester || !requester.isActive) {
       res.status(404).json({ error: "REQUESTER_NOT_FOUND" });
       return;

@@ -9,20 +9,39 @@ describe("POST /api/tickets", () => {
   let categoryId: number;
   let relatedSystemId: number;
 
+  const testPasswordHash = "test-password-hash";
+
   beforeAll(async () => {
     const prisma = getPrisma();
 
-    const active = await prisma.developmentRequester.create({
-      data: { name: "Create Ticket Active", email: "create.active@example.com", isActive: true },
+    const active = await prisma.user.create({
+      data: {
+        name: "Create Ticket Active",
+        email: "create.active@example.com",
+        passwordHash: testPasswordHash,
+        role: "REQUESTER",
+        isActive: true,
+        mustChangePassword: false,
+      },
     });
-    const inactive = await prisma.developmentRequester.create({
-      data: { name: "Create Ticket Inactive", email: "create.inactive@example.com", isActive: false },
+
+    const inactive = await prisma.user.create({
+      data: {
+        name: "Create Ticket Inactive",
+        email: "create.inactive@example.com",
+        passwordHash: testPasswordHash,
+        role: "REQUESTER",
+        isActive: false,
+        mustChangePassword: false,
+      },
     });
+
     const category = await prisma.category.upsert({
       where: { name: "Hardware" },
       update: {},
       create: { name: "Hardware" },
     });
+
     const relatedSystem = await prisma.relatedSystem.upsert({
       where: { name: "Corporate Laptop" },
       update: {},
@@ -37,11 +56,42 @@ describe("POST /api/tickets", () => {
 
   afterAll(async () => {
     const prisma = getPrisma();
-    await prisma.ticket.deleteMany({
-      where: { requesterId: { in: [activeRequesterId, inactiveRequesterId] } },
+
+    const tickets = await prisma.ticket.findMany({
+      where: {
+        requesterId: {
+          in: [activeRequesterId, inactiveRequesterId],
+        },
+      },
+      select: { id: true },
     });
-    await prisma.developmentRequester.deleteMany({
-      where: { id: { in: [activeRequesterId, inactiveRequesterId] } },
+
+    const ticketIds = tickets.map((ticket) => ticket.id);
+
+    if (ticketIds.length > 0) {
+      await prisma.publicComment.deleteMany({
+        where: { ticketId: { in: ticketIds } },
+      });
+
+      await prisma.internalNote.deleteMany({
+        where: { ticketId: { in: ticketIds } },
+      });
+
+      await prisma.attachment.deleteMany({
+        where: { ticketId: { in: ticketIds } },
+      });
+
+      await prisma.ticket.deleteMany({
+        where: { id: { in: ticketIds } },
+      });
+    }
+
+    await prisma.user.deleteMany({
+      where: {
+        id: {
+          in: [activeRequesterId, inactiveRequesterId],
+        },
+      },
     });
   });
 
@@ -51,7 +101,8 @@ describe("POST /api/tickets", () => {
       categoryId,
       relatedSystemId,
       summary: "Laptop battery drains quickly",
-      description: "Battery drains fast even when idle, started after last update.",
+      description:
+        "Battery drains fast even when idle, started after last update.",
       requestedPriority: "MEDIUM",
       ...overrides,
     };
@@ -59,7 +110,9 @@ describe("POST /api/tickets", () => {
 
   // AC-01
   it("creates a Ticket and returns a generated Ticket Number", async () => {
-    const res = await request(app).post("/api/tickets").send(validPayload());
+    const res = await request(app)
+      .post("/api/tickets")
+      .send(validPayload());
 
     expect(res.status).toBe(201);
     expect(res.body.ticketNumber).toMatch(/^TKT-\d{4}-\d{6}$/);
@@ -69,7 +122,9 @@ describe("POST /api/tickets", () => {
 
   // AC-04, BR-14
   it("rejects a Summary shorter than 5 characters with a field-level message", async () => {
-    const res = await request(app).post("/api/tickets").send(validPayload({ summary: "Hi" }));
+    const res = await request(app)
+      .post("/api/tickets")
+      .send(validPayload({ summary: "Hi" }));
 
     expect(res.status).toBe(400);
     expect(res.body.error).toBe("VALIDATION_FAILED");
@@ -88,7 +143,9 @@ describe("POST /api/tickets", () => {
 
   // BR-16
   it("rejects an unknown categoryId", async () => {
-    const res = await request(app).post("/api/tickets").send(validPayload({ categoryId: 999999 }));
+    const res = await request(app)
+      .post("/api/tickets")
+      .send(validPayload({ categoryId: 999999 }));
 
     expect(res.status).toBe(400);
     expect(res.body.fields.categoryId).toBeTruthy();
@@ -106,10 +163,17 @@ describe("POST /api/tickets", () => {
 
   // BR-18: duplicate-submission guard
   it("returns the same Ticket instead of creating a duplicate within 5 seconds", async () => {
-    const payload = validPayload({ summary: "Duplicate guard test summary" });
+    const payload = validPayload({
+      summary: "Duplicate guard test summary",
+    });
 
-    const first = await request(app).post("/api/tickets").send(payload);
-    const second = await request(app).post("/api/tickets").send(payload);
+    const first = await request(app)
+      .post("/api/tickets")
+      .send(payload);
+
+    const second = await request(app)
+      .post("/api/tickets")
+      .send(payload);
 
     expect(first.status).toBe(201);
     expect(second.body.id).toBe(first.body.id);

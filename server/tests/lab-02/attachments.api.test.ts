@@ -8,6 +8,8 @@ describe("Attachments API", () => {
   let requesterBId: number;
   let ticketId: number;
 
+  const testPasswordHash = "test-password-hash";
+
   const tinyPng = Buffer.from(
     "89504e470d0a1a0a0000000d49484452000000010000000108020000009077" +
       "53de0000000c4944415408d76360000000020001e221bc330000000049454e44ae426082",
@@ -17,19 +19,25 @@ describe("Attachments API", () => {
   beforeAll(async () => {
     const prisma = getPrisma();
 
-    const a = await prisma.developmentRequester.create({
+    const a = await prisma.user.create({
       data: {
         name: "Attach Test A",
         email: "attach.a@example.com",
+        passwordHash: testPasswordHash,
+        role: "REQUESTER",
         isActive: true,
+        mustChangePassword: false,
       },
     });
 
-    const b = await prisma.developmentRequester.create({
+    const b = await prisma.user.create({
       data: {
         name: "Attach Test B",
         email: "attach.b@example.com",
+        passwordHash: testPasswordHash,
+        role: "REQUESTER",
         isActive: true,
+        mustChangePassword: false,
       },
     });
 
@@ -54,6 +62,7 @@ describe("Attachments API", () => {
         summary: "Attachment test ticket",
         description: "Used to test attachment upload/download/remove flows.",
         requestedPriority: "MEDIUM",
+        itPriority: "MEDIUM",
         status: "NEW",
       },
     });
@@ -66,6 +75,14 @@ describe("Attachments API", () => {
   afterAll(async () => {
     const prisma = getPrisma();
 
+    await prisma.publicComment.deleteMany({
+      where: { ticketId },
+    });
+
+    await prisma.internalNote.deleteMany({
+      where: { ticketId },
+    });
+
     await prisma.attachment.deleteMany({
       where: { ticketId },
     });
@@ -74,7 +91,7 @@ describe("Attachments API", () => {
       where: { id: ticketId },
     });
 
-    await prisma.developmentRequester.deleteMany({
+    await prisma.user.deleteMany({
       where: {
         id: { in: [requesterAId, requesterBId] },
       },
