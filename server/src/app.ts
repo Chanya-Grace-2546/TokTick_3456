@@ -23,6 +23,7 @@ import {
 } from "./auth.js";
 
 const MAX_ACTIVE_ATTACHMENTS = 5;
+const MAX_COMMENT_LENGTH = 2000;
 
 // getPrisma() is your lazy database handle. Call it INSIDE a route when you
 // need the DB (Issue 4).
@@ -84,38 +85,6 @@ app.get("/api/categories", async (_req: Request, res: Response) => {
   }
 });
 
-// ---------------------------------------------------------------------------
-// Lab 2 Issue 2 — Development Requester Context
-// GET /api/requesters -> active Development Requesters only (BR-05).
-//
-// Lab 3 replaces the temporary Requester selector with authentication.
-// This legacy endpoint is kept temporarily for Lab 2 regression coverage.
-// The Lab 3 client must not use it to choose the authenticated Requester.
-// ---------------------------------------------------------------------------
-app.get("/api/requesters", async (_req: Request, res: Response) => {
-  try {
-    const requesters = await getPrisma().user.findMany({
-      where: {
-        isActive: true,
-        role: "REQUESTER",
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-      },
-      orderBy: {
-        name: "asc",
-      },
-    });
-
-    res.status(200).json(requesters);
-  } catch {
-    res.status(500).json({
-      error: "Failed to load development requesters",
-    });
-  }
-});
 
 // ---------------------------------------------------------------------------
 // Lab 3 Issue 3 — Authentication
@@ -218,16 +187,17 @@ app.post(
       const prisma = getPrisma();
 
       if (req.sessionId) {
-  await prisma.session.updateMany({
-    where: {
-      id: req.sessionId,
-      invalidatedAt: null,
-    },
-    data: {
-      invalidatedAt: new Date(),
-    },
-  });
-}
+        await prisma.session.updateMany({
+          where: {
+            id: req.sessionId,
+            invalidatedAt: null,
+          },
+          data: {
+            invalidatedAt: new Date(),
+          },
+        });
+      }
+
       res.clearCookie(SESSION_COOKIE_NAME, {
         httpOnly: true,
         sameSite: "lax",
@@ -353,19 +323,19 @@ app.post(
         }),
 
         // BR-08: keep the current Session authenticated after the password
-// change, while invalidating every other Session for this User.
-prisma.session.updateMany({
-  where: {
-    userId: user.id,
-    id: {
-      not: req.sessionId!,
-    },
-    invalidatedAt: null,
-  },
-  data: {
-    invalidatedAt: new Date(),
-  },
-}),
+        // change, while invalidating every other Session for this User.
+        prisma.session.updateMany({
+          where: {
+            userId: user.id,
+            id: {
+              not: req.sessionId!,
+            },
+            invalidatedAt: null,
+          },
+          data: {
+            invalidatedAt: new Date(),
+          },
+        }),
       ]);
 
       res.status(200).json({
@@ -901,6 +871,10 @@ app.get(
           ticket.itPriority,
         currentStatus:
           ticket.status,
+        requesterResolvedAt:
+          ticket.requesterResolvedAt,
+        requesterResolvedById:
+          ticket.requesterResolvedById,
         createdAt:
           ticket.createdAt,
         updatedAt:
@@ -937,6 +911,440 @@ app.get(
         error: "UNEXPECTED_ERROR",
       });
     }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// Lab 3 Issue 4 — Public Comments
+//
+// Public Comments are append-only and visible to:
+// - the Requester who owns the Ticket
+// - IT Staff
+// - Administrators
+//
+// Requester ownership is always determined from the authenticated Session.
+// The backend supplies the author and creation time.
+// ---------------------------------------------------------------------------
+
+// GET /api/tickets/:id/comments
+app.get(
+  "/api/tickets/:id/comments",
+  requireAuth,
+  requirePasswordChanged,
+  requireRole(
+    "REQUESTER",
+    "IT_STAFF",
+    "ADMINISTRATOR"
+  ),
+  async (
+    req: AuthenticatedRequest,
+    res: Response
+  ) => {
+    const ticketId =
+      Number(req.params.id);
+
+    if (
+      Number.isNaN(ticketId)
+    ) {
+      res.status(400).json({
+        error:
+          "INVALID_TICKET_ID",
+      });
+      return;
+    }
+
+    try {
+      const prisma = getPrisma();
+
+      const user =
+        req.authUser!;
+
+      const ticket =
+        await prisma.ticket.findFirst({
+          where:
+            user.role ===
+            "REQUESTER"
+              ? {
+                  id: ticketId,
+                  requesterId:
+                    user.id,
+                }
+              : {
+                  id: ticketId,
+                },
+          select: {
+            id: true,
+          },
+        });
+
+      if (!ticket) {
+        res.status(404).json({
+          error:
+            "TICKET_NOT_FOUND",
+        });
+        return;
+      }
+
+      const comments =
+        await prisma.publicComment.findMany({
+          where: {
+            ticketId,
+          },
+          orderBy: [
+            {
+              createdAt:
+                "asc",
+            },
+            {
+              id: "asc",
+            },
+          ],
+          select: {
+            id: true,
+            content: true,
+            createdAt: true,
+            author: {
+              select: {
+                id: true,
+                name: true,
+                role: true,
+              },
+            },
+          },
+        });
+
+      res.status(200).json({
+        items: comments,
+      });
+    } catch (err) {
+      console.error(
+        "Failed to load Public Comments:",
+        err
+      );
+
+      res.status(500).json({
+        error:
+          "UNEXPECTED_ERROR",
+      });
+    }
+  }
+);
+
+// POST /api/tickets/:id/comments
+app.post(
+  "/api/tickets/:id/comments",
+  requireAuth,
+  requireSameOrigin,
+  requirePasswordChanged,
+  requireRole(
+    "REQUESTER",
+    "IT_STAFF",
+    "ADMINISTRATOR"
+  ),
+  async (
+    req: AuthenticatedRequest,
+    res: Response
+  ) => {
+    const ticketId =
+      Number(req.params.id);
+
+    if (
+      Number.isNaN(ticketId)
+    ) {
+      res.status(400).json({
+        error:
+          "INVALID_TICKET_ID",
+      });
+      return;
+    }
+
+    const { content } =
+      req.body as {
+        content?: unknown;
+      };
+
+    if (
+      typeof content !==
+      "string"
+    ) {
+      res.status(400).json({
+        error:
+          "INVALID_COMMENT",
+      });
+      return;
+    }
+
+    const trimmedContent =
+      content.trim();
+
+    if (
+      trimmedContent.length <
+        1 ||
+      trimmedContent.length >
+        MAX_COMMENT_LENGTH
+    ) {
+      res.status(400).json({
+        error:
+          "INVALID_COMMENT",
+      });
+      return;
+    }
+
+    try {
+      const prisma = getPrisma();
+
+      const user =
+        req.authUser!;
+
+      const ticket =
+        await prisma.ticket.findFirst({
+          where:
+            user.role ===
+            "REQUESTER"
+              ? {
+                  id: ticketId,
+                  requesterId:
+                    user.id,
+                }
+              : {
+                  id: ticketId,
+                },
+          select: {
+            id: true,
+          },
+        });
+
+      if (!ticket) {
+        res.status(404).json({
+          error:
+            "TICKET_NOT_FOUND",
+        });
+        return;
+      }
+
+      const comment =
+        await prisma.$transaction(
+          async (tx) => {
+            const created =
+              await tx.publicComment.create({
+                data: {
+                  ticketId,
+                  authorId:
+                    user.id,
+                  content:
+                    trimmedContent,
+                },
+                select: {
+                  id: true,
+                  content: true,
+                  createdAt: true,
+                  author: {
+                    select: {
+                      id: true,
+                      name: true,
+                      role: true,
+                    },
+                  },
+                },
+              });
+
+            // BR-35:
+            // when the owning Requester posts a new Public Comment,
+            // clear any previous "problem appears resolved" indication.
+            if (
+              user.role ===
+              "REQUESTER"
+            ) {
+              await tx.ticket.update({
+                where: {
+                  id: ticketId,
+                },
+                data: {
+                  requesterResolvedAt:
+                    null,
+                  requesterResolvedById:
+                    null,
+                },
+              });
+            }
+
+            return created;
+          }
+        );
+
+      res.status(201).json(
+        comment
+      );
+    } catch (err) {
+      console.error(
+        "Failed to create Public Comment:",
+        err
+      );
+
+      res.status(500).json({
+        error:
+          "UNEXPECTED_ERROR",
+      });
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// Lab 3 Issue 4 — Requester "Problem Appears Resolved"
+//
+// This is a Requester indication only. It does NOT formally resolve or close
+// the Ticket and therefore does not modify Ticket.status.
+//
+// Repeating the action is idempotent: an existing indication keeps its
+// original timestamp.
+// ---------------------------------------------------------------------------
+app.post(
+  "/api/tickets/:id/problem-appears-resolved",
+  requireAuth,
+  requireSameOrigin,
+  requirePasswordChanged,
+  requireRole("REQUESTER"),
+  async (
+    req: AuthenticatedRequest,
+    res: Response
+  ) => {
+    const ticketId =
+      Number(req.params.id);
+
+    const requesterId =
+      req.authUser!.id;
+
+    if (
+      Number.isNaN(ticketId)
+    ) {
+      res.status(400).json({
+        error:
+          "INVALID_TICKET_ID",
+      });
+      return;
+    }
+
+    try {
+      const prisma = getPrisma();
+
+      const ticket =
+        await prisma.ticket.findFirst({
+          where: {
+            id: ticketId,
+            requesterId,
+          },
+          select: {
+            id: true,
+            status: true,
+            requesterResolvedAt:
+              true,
+            requesterResolvedById:
+              true,
+          },
+        });
+
+      if (!ticket) {
+        res.status(404).json({
+          error:
+            "TICKET_NOT_FOUND",
+        });
+        return;
+      }
+
+      // BR-34: repeated action is idempotent.
+      if (
+        ticket.requesterResolvedAt
+      ) {
+        res.status(200).json({
+          requesterResolvedAt:
+            ticket.requesterResolvedAt,
+          status:
+            ticket.status,
+        });
+        return;
+      }
+
+      const updated =
+        await prisma.ticket.update({
+          where: {
+            id: ticket.id,
+          },
+          data: {
+            requesterResolvedAt:
+              new Date(),
+            requesterResolvedById:
+              requesterId,
+          },
+          select: {
+            requesterResolvedAt:
+              true,
+            status: true,
+          },
+        });
+
+      res.status(200).json({
+        requesterResolvedAt:
+          updated.requesterResolvedAt,
+        status:
+          updated.status,
+      });
+    } catch (err) {
+      console.error(
+        "Failed to record requester apparent resolution:",
+        err
+      );
+
+      res.status(500).json({
+        error:
+          "UNEXPECTED_ERROR",
+      });
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// Lab 3 Issue 4 — Internal Notes authorization boundary
+//
+// Full IT Staff / Administrator Internal Note behavior belongs to the staff
+// Ticket operations work. Issue 4 establishes that Requesters cannot retrieve
+// or create Internal Notes and no Internal Note content is returned to them.
+// ---------------------------------------------------------------------------
+app.get(
+  "/api/tickets/:id/internal-notes",
+  requireAuth,
+  requirePasswordChanged,
+  requireRole(
+    "IT_STAFF",
+    "ADMINISTRATOR"
+  ),
+  async (
+    _req: AuthenticatedRequest,
+    res: Response
+  ) => {
+    res.status(501).json({
+      error:
+        "NOT_IMPLEMENTED",
+    });
+  }
+);
+
+app.post(
+  "/api/tickets/:id/internal-notes",
+  requireAuth,
+  requireSameOrigin,
+  requirePasswordChanged,
+  requireRole(
+    "IT_STAFF",
+    "ADMINISTRATOR"
+  ),
+  async (
+    _req: AuthenticatedRequest,
+    res: Response
+  ) => {
+    res.status(501).json({
+      error:
+        "NOT_IMPLEMENTED",
+    });
   }
 );
 
