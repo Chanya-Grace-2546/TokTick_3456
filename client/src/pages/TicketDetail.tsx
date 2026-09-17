@@ -174,19 +174,19 @@ export default function TicketDetail() {
 
         setTicket(data);
       } catch (error) {
-  if (
-    error instanceof
-    TicketNotFoundError
-  ) {
-    setLoadError(
-      "This ticket doesn't exist or isn't available."
-    );
-  } else {
-    setLoadError(
-      "Could not load this ticket. Please try again."
-    );
-  }
-} finally {
+        if (
+          error instanceof
+          TicketNotFoundError
+        ) {
+          setLoadError(
+            "This ticket doesn't exist or isn't available."
+          );
+        } else {
+          setLoadError(
+            "Could not load this ticket. Please try again."
+          );
+        }
+      } finally {
         setLoading(false);
       }
     }, [ticketId]);
@@ -821,6 +821,172 @@ export default function TicketDetail() {
             "0 1px 3px rgba(0,0,0,0.05)",
         }}
       >
+        <div className="d-flex justify-content-between align-items-center mb-3">
+          <h2
+            className="h5 mb-0"
+            style={{
+              color:
+                "#1f2e27",
+            }}
+          >
+            Attachments (
+            {
+              activeAttachmentCount
+            }
+            /
+            {
+              MAX_ACTIVE_ATTACHMENTS
+            }
+            )
+          </h2>
+
+          <div>
+            <input
+              id="attachment-file"
+              type="file"
+              className="d-none"
+              accept=".jpg,.jpeg,.png,.webp,.pdf"
+              disabled={
+                uploading ||
+                activeAttachmentCount >=
+                  MAX_ACTIVE_ATTACHMENTS
+              }
+              onChange={(
+                event
+              ) =>
+                void handleFileChange(
+                  event
+                )
+              }
+            />
+
+            <label
+              htmlFor="attachment-file"
+              className="btn btn-sm"
+              style={{
+                backgroundColor:
+                  "#006b3c",
+                color: "white",
+                opacity:
+                  uploading ||
+                  activeAttachmentCount >=
+                    MAX_ACTIVE_ATTACHMENTS
+                    ? 0.65
+                    : 1,
+                cursor:
+                  uploading ||
+                  activeAttachmentCount >=
+                    MAX_ACTIVE_ATTACHMENTS
+                    ? "not-allowed"
+                    : "pointer",
+              }}
+            >
+              {uploading
+                ? "Uploading..."
+                : "+ Add Attachment"}
+            </label>
+          </div>
+        </div>
+
+        {attachmentError && (
+          <div
+            className="alert alert-danger"
+            role="alert"
+          >
+            {attachmentError}
+          </div>
+        )}
+
+        {ticket.attachments
+          .length === 0 ? (
+          <p className="text-muted">
+            No attachments yet.
+          </p>
+        ) : (
+          <div className="d-flex flex-column gap-2">
+            {ticket.attachments.map(
+              (attachment) => (
+                <div
+                  key={
+                    attachment.id
+                  }
+                  className="border rounded p-3"
+                >
+                  <div className="d-flex flex-column flex-md-row justify-content-between gap-3">
+                    <div>
+                      <div className="fw-semibold">
+                        {
+                          attachment.fileName
+                        }
+                      </div>
+
+                      <div className="text-muted small">
+                        {Math.ceil(
+                          attachment.sizeBytes /
+                            1024
+                        )}{" "}
+                        KB
+                      </div>
+
+                      {attachment.isRemoved && (
+                        <div className="text-danger small mt-1">
+                          Removed
+                          {attachment.removedReason
+                            ? ` — ${attachment.removedReason}`
+                            : ""}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="d-flex gap-2 align-items-start">
+                      {!attachment.isRemoved && (
+                        <>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline-success"
+                            onClick={() =>
+                              void handleDownloadAttachment(
+                                attachment
+                              )
+                            }
+                          >
+                            Download
+                          </button>
+
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline-danger"
+                            onClick={() =>
+                              void handleRemoveAttachment(
+                                attachment
+                              )
+                            }
+                          >
+                            Remove
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )
+            )}
+          </div>
+        )}
+      </div>
+
+      <div
+        className="p-4"
+        style={{
+          backgroundColor:
+            "white",
+          border:
+            "1px solid #e0e5e2",
+          borderRadius: 8,
+          boxShadow:
+            "0 1px 3px rgba(0,0,0,0.05)",
+        }}
+      >
         <h2
           className="h5 mb-3"
           style={{
@@ -974,172 +1140,6 @@ export default function TicketDetail() {
             </div>
           )}
         </form>
-      </div>
-
-      <div
-        className="p-4"
-        style={{
-          backgroundColor:
-            "white",
-          border:
-            "1px solid #e0e5e2",
-          borderRadius: 8,
-          boxShadow:
-            "0 1px 3px rgba(0,0,0,0.05)",
-        }}
-      >
-        <div className="d-flex justify-content-between align-items-center mb-3">
-          <h2
-            className="h5 mb-0"
-            style={{
-              color:
-                "#1f2e27",
-            }}
-          >
-            Attachments (
-            {
-              activeAttachmentCount
-            }
-            /
-            {
-              MAX_ACTIVE_ATTACHMENTS
-            }
-            )
-          </h2>
-
-          <div>
-            <input
-              id="attachment-file"
-              type="file"
-              className="d-none"
-              accept=".jpg,.jpeg,.png,.webp,.pdf"
-              disabled={
-                uploading ||
-                activeAttachmentCount >=
-                  MAX_ACTIVE_ATTACHMENTS
-              }
-              onChange={(
-                event
-              ) =>
-                void handleFileChange(
-                  event
-                )
-              }
-            />
-
-            <label
-              htmlFor="attachment-file"
-              className="btn btn-sm"
-              style={{
-                backgroundColor:
-                  "#006b3c",
-                color: "white",
-                opacity:
-                  uploading ||
-                  activeAttachmentCount >=
-                    MAX_ACTIVE_ATTACHMENTS
-                    ? 0.65
-                    : 1,
-                cursor:
-                  uploading ||
-                  activeAttachmentCount >=
-                    MAX_ACTIVE_ATTACHMENTS
-                    ? "not-allowed"
-                    : "pointer",
-              }}
-            >
-              {uploading
-                ? "Uploading..."
-                : "+ Add Attachment"}
-            </label>
-          </div>
-        </div>
-
-        {attachmentError && (
-          <div
-            className="alert alert-danger"
-            role="alert"
-          >
-            {attachmentError}
-          </div>
-        )}
-
-        {ticket.attachments
-          .length === 0 ? (
-          <p className="text-muted">
-            No attachments yet.
-          </p>
-        ) : (
-          <div className="d-flex flex-column gap-2">
-            {ticket.attachments.map(
-              (attachment) => (
-                <div
-                  key={
-                    attachment.id
-                  }
-                  className="border rounded p-3"
-                >
-                  <div className="d-flex flex-column flex-md-row justify-content-between gap-3">
-                    <div>
-                      <div className="fw-semibold">
-                        {
-                          attachment.fileName
-                        }
-                      </div>
-
-                      <div className="text-muted small">
-                        {Math.ceil(
-                          attachment.sizeBytes /
-                            1024
-                        )}{" "}
-                        KB
-                      </div>
-
-                      {attachment.isRemoved && (
-                        <div className="text-danger small mt-1">
-                          Removed
-                          {attachment.removedReason
-                            ? ` — ${attachment.removedReason}`
-                            : ""}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="d-flex gap-2 align-items-start">
-                      {!attachment.isRemoved && (
-                        <>
-                          <button
-                            type="button"
-                            className="btn btn-sm btn-outline-success"
-                            onClick={() =>
-                              void handleDownloadAttachment(
-                                attachment
-                              )
-                            }
-                          >
-                            Download
-                          </button>
-
-                          <button
-                            type="button"
-                            className="btn btn-sm btn-outline-danger"
-                            onClick={() =>
-                              void handleRemoveAttachment(
-                                attachment
-                              )
-                            }
-                          >
-                            Remove
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )
-            )}
-          </div>
-        )}
       </div>
     </div>
   );
