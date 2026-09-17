@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
+import bcrypt from "bcryptjs";
 import { app } from "../../src/app.js";
 import { getPrisma } from "../../src/prisma.js";
 
@@ -8,15 +9,22 @@ describe("Ticket Detail API", () => {
   let requesterBId: number;
   let ticketId: number;
 
-  const testPasswordHash = "test-password-hash";
+  const testPassword = "TestPassword1!";
+  const requesterAEmail = "ticket.detail.a@example.com";
+  const requesterBEmail = "ticket.detail.b@example.com";
+
+  const requesterAAgent = request.agent(app);
+  const requesterBAgent = request.agent(app);
 
   beforeAll(async () => {
     const prisma = getPrisma();
 
+    const testPasswordHash = await bcrypt.hash(testPassword, 12);
+
     const a = await prisma.user.create({
       data: {
         name: "Ticket Detail Test A",
-        email: "ticket.detail.a@example.com",
+        email: requesterAEmail,
         passwordHash: testPasswordHash,
         role: "REQUESTER",
         isActive: true,
@@ -27,7 +35,7 @@ describe("Ticket Detail API", () => {
     const b = await prisma.user.create({
       data: {
         name: "Ticket Detail Test B",
-        email: "ticket.detail.b@example.com",
+        email: requesterBEmail,
         passwordHash: testPasswordHash,
         role: "REQUESTER",
         isActive: true,
@@ -64,6 +72,23 @@ describe("Ticket Detail API", () => {
     requesterAId = a.id;
     requesterBId = b.id;
     ticketId = ticket.id;
+
+    const loginA = await requesterAAgent
+      .post("/api/auth/login")
+      .send({
+        email: requesterAEmail,
+        password: testPassword,
+      });
+
+    const loginB = await requesterBAgent
+      .post("/api/auth/login")
+      .send({
+        email: requesterBEmail,
+        password: testPassword,
+      });
+
+    expect(loginA.status).toBe(200);
+    expect(loginB.status).toBe(200);
   });
 
   afterAll(async () => {
@@ -85,6 +110,14 @@ describe("Ticket Detail API", () => {
       where: { id: ticketId },
     });
 
+    await prisma.session.deleteMany({
+      where: {
+        userId: {
+          in: [requesterAId, requesterBId],
+        },
+      },
+    });
+
     await prisma.user.deleteMany({
       where: {
         id: {
@@ -95,20 +128,41 @@ describe("Ticket Detail API", () => {
   });
 
   describe("GET /api/tickets/:id", () => {
-    it("returns the owned ticket with its attachments", async () => {
+    it("requires authentication", async () => {
       const res = await request(app).get(
-        `/api/tickets/${ticketId}?requesterId=${requesterAId}`
+        `/api/tickets/${ticketId}`
+      );
+
+      expect(res.status).toBe(401);
+      expect(res.body.error).toBe("UNAUTHENTICATED");
+    });
+
+    it("returns the authenticated requester's owned ticket with its attachments", async () => {
+      const res = await requesterAAgent.get(
+        `/api/tickets/${ticketId}`
       );
 
       expect(res.status).toBe(200);
       expect(res.body.ticketNumber).toBe("TKT-TEST-DETAIL01");
+      expect(res.body.requesterId).toBe(requesterAId);
       expect(res.body.attachments).toEqual([]);
     });
 
-    // BR-09: cross-requester access rejected, same 404 either way
+    // BR-09: cross-requester access rejected, same 404 either way.
     it("returns 404 for a different requester's ticket", async () => {
-      const res = await request(app).get(
-        `/api/tickets/${ticketId}?requesterId=${requesterBId}`
+      const res = await requesterBAgent.get(
+        `/api/tickets/${ticketId}`
+      );
+
+      expect(res.status).toBe(404);
+      expect(res.body.error).toBe("TICKET_NOT_FOUND");
+    });
+
+    // Lab 3 security regression:
+    // query-string requesterId must not override authenticated identity.
+    it("does not allow requesterId query tampering", async () => {
+      const res = await requesterBAgent.get(
+        `/api/tickets/${ticketId}?requesterId=${requesterAId}`
       );
 
       expect(res.status).toBe(404);

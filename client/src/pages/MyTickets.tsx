@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { fetchTickets, TicketListItem, Priority } from "../api.js";
-import { useRequester } from "../context/RequesterContext.js";
 import { zenGreen } from "../theme.js";
 
 type ScreenState = "loading" | "error" | "ready";
@@ -29,8 +28,8 @@ const SORT_LABELS: Record<SortField, string> = {
 // Lab 2 Issue 5 — My Tickets
 // Reused this file from Issue 2's placeholder rather than creating a new
 // one, since it already owns the /tickets route.
+// Lab 3 — Requester identity now comes from the authenticated Session.
 export default function TicketsPlaceholder() {
-  const { requester } = useRequester();
   const navigate = useNavigate();
 
   const [state, setState] = useState<ScreenState>("loading");
@@ -49,12 +48,10 @@ export default function TicketsPlaceholder() {
   const hasActiveFilters = Boolean(search || requestedPriority || currentStatus);
 
   useEffect(() => {
-    if (!requester) return;
     let cancelled = false;
     setState("loading");
 
     fetchTickets({
-      requesterId: requester.id,
       search: search || undefined,
       requestedPriority: (requestedPriority as Priority) || undefined,
       currentStatus: currentStatus || undefined,
@@ -76,7 +73,7 @@ export default function TicketsPlaceholder() {
     return () => {
       cancelled = true;
     };
-  }, [requester, search, requestedPriority, currentStatus, sortBy, sortDir, page]);
+  }, [search, requestedPriority, currentStatus, sortBy, sortDir, page]);
 
   function toggleSort(field: SortField) {
     if (sortBy === field) {
@@ -211,6 +208,7 @@ export default function TicketsPlaceholder() {
       </div>
 
       {state === "loading" && <p role="status">Loading tickets…</p>}
+
       {state === "error" && (
         <p role="alert" className="text-danger">
           Couldn't load your tickets. Please try again.
@@ -233,7 +231,11 @@ export default function TicketsPlaceholder() {
       {state === "ready" && totalItems === 0 && hasActiveFilters && (
         <div className="p-4 text-center" style={cardStyle}>
           <p className="mb-3">No tickets match your search or filters.</p>
-          <button type="button" className="btn btn-sm btn-outline-secondary" onClick={clearFilters}>
+          <button
+            type="button"
+            className="btn btn-sm btn-outline-secondary"
+            onClick={clearFilters}
+          >
             Clear Filters
           </button>
         </div>
@@ -297,9 +299,11 @@ export default function TicketsPlaceholder() {
               >
                 Previous
               </button>
+
               <span className="small text-muted">
                 Page {page} of {totalPages}
               </span>
+
               <button
                 type="button"
                 className="btn btn-sm btn-outline-secondary"

@@ -1,14 +1,23 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
+import bcrypt from "bcryptjs";
+import fs from "fs";
+import path from "path";
 import { app } from "../../src/app.js";
 import { getPrisma } from "../../src/prisma.js";
+import { UPLOADS_DIR } from "../../src/attachmentUpload.js";
 
 describe("Attachments API", () => {
   let requesterAId: number;
   let requesterBId: number;
   let ticketId: number;
 
-  const testPasswordHash = "test-password-hash";
+  const testPassword = "TestPassword1!";
+  const requesterAEmail = "attach.a@example.com";
+  const requesterBEmail = "attach.b@example.com";
+
+  const requesterAAgent = request.agent(app);
+  const requesterBAgent = request.agent(app);
 
   const tinyPng = Buffer.from(
     "89504e470d0a1a0a0000000d49484452000000010000000108020000009077" +
@@ -19,10 +28,12 @@ describe("Attachments API", () => {
   beforeAll(async () => {
     const prisma = getPrisma();
 
+    const testPasswordHash = await bcrypt.hash(testPassword, 12);
+
     const a = await prisma.user.create({
       data: {
         name: "Attach Test A",
-        email: "attach.a@example.com",
+        email: requesterAEmail,
         passwordHash: testPasswordHash,
         role: "REQUESTER",
         isActive: true,
@@ -33,7 +44,7 @@ describe("Attachments API", () => {
     const b = await prisma.user.create({
       data: {
         name: "Attach Test B",
-        email: "attach.b@example.com",
+        email: requesterBEmail,
         passwordHash: testPasswordHash,
         role: "REQUESTER",
         isActive: true,
@@ -70,10 +81,42 @@ describe("Attachments API", () => {
     requesterAId = a.id;
     requesterBId = b.id;
     ticketId = ticket.id;
+
+    const loginA = await requesterAAgent
+      .post("/api/auth/login")
+      .send({
+        email: requesterAEmail,
+        password: testPassword,
+      });
+
+    const loginB = await requesterBAgent
+      .post("/api/auth/login")
+      .send({
+        email: requesterBEmail,
+        password: testPassword,
+      });
+
+    expect(loginA.status).toBe(200);
+    expect(loginB.status).toBe(200);
   });
 
   afterAll(async () => {
     const prisma = getPrisma();
+
+    // Remove physical test files created by multer before deleting DB rows.
+    const attachments = await prisma.attachment.findMany({
+      where: { ticketId },
+      select: { storedFileName: true },
+    });
+
+    for (const attachment of attachments) {
+      const filePath = path.join(
+        UPLOADS_DIR,
+        attachment.storedFileName
+      );
+
+      await fs.promises.unlink(filePath).catch(() => {});
+    }
 
     await prisma.publicComment.deleteMany({
       where: { ticketId },
@@ -91,18 +134,40 @@ describe("Attachments API", () => {
       where: { id: ticketId },
     });
 
+    await prisma.session.deleteMany({
+      where: {
+        userId: {
+          in: [requesterAId, requesterBId],
+        },
+      },
+    });
+
     await prisma.user.deleteMany({
       where: {
-        id: { in: [requesterAId, requesterBId] },
+        id: {
+          in: [requesterAId, requesterBId],
+        },
       },
     });
   });
 
   describe("POST /api/tickets/:id/attachments", () => {
-    it("uploads a valid PNG and returns its metadata", async () => {
+    it("requires authentication", async () => {
       const res = await request(app)
         .post(`/api/tickets/${ticketId}/attachments`)
-        .field("requesterId", String(requesterAId))
+        .attach("file", tinyPng, {
+          filename: "unauthenticated.png",
+          contentType: "image/png",
+        });
+
+      expect(res.status).toBe(401);
+      expect(res.body.error).toBe("UNAUTHENTICATED");
+    });
+
+    it("uploads a valid PNG and returns its metadata", async () => {
+      const res = await requesterAAgent
+        .post(`/api/tickets/${ticketId}/attachments`)
+        .set("Origin", "http://localhost:5173")
         .attach("file", tinyPng, {
           filename: "screenshot.png",
           contentType: "image/png",
@@ -115,9 +180,9 @@ describe("Attachments API", () => {
 
     // BR-22
     it("rejects a disallowed file type", async () => {
-      const res = await request(app)
+      const res = await requesterAAgent
         .post(`/api/tickets/${ticketId}/attachments`)
-        .field("requesterId", String(requesterAId))
+        .set("Origin", "http://localhost:5173")
         .attach("file", Buffer.from("not an image"), {
           filename: "notes.txt",
           contentType: "text/plain",
@@ -129,11 +194,27 @@ describe("Attachments API", () => {
 
     // BR-09
     it("rejects upload from a non-owning requester", async () => {
-      const res = await request(app)
+      const res = await requesterBAgent
         .post(`/api/tickets/${ticketId}/attachments`)
-        .field("requesterId", String(requesterBId))
+        .set("Origin", "http://localhost:5173")
         .attach("file", tinyPng, {
           filename: "screenshot2.png",
+          contentType: "image/png",
+        });
+
+      expect(res.status).toBe(404);
+      expect(res.body.error).toBe("TICKET_NOT_FOUND");
+    });
+
+    // Lab 3 security regression:
+    // a requesterId form field must not override authenticated identity.
+    it("does not allow requesterId form-field tampering", async () => {
+      const res = await requesterBAgent
+        .post(`/api/tickets/${ticketId}/attachments`)
+        .set("Origin", "http://localhost:5173")
+        .field("requesterId", String(requesterAId))
+        .attach("file", tinyPng, {
+          filename: "tampered.png",
           contentType: "image/png",
         });
 
@@ -145,20 +226,20 @@ describe("Attachments API", () => {
     it("rejects a 6th active attachment", async () => {
       // One was already added above; add 4 more to reach 5.
       for (let i = 0; i < 4; i++) {
-        const r = await request(app)
+        const res = await requesterAAgent
           .post(`/api/tickets/${ticketId}/attachments`)
-          .field("requesterId", String(requesterAId))
+          .set("Origin", "http://localhost:5173")
           .attach("file", tinyPng, {
             filename: `extra-${i}.png`,
             contentType: "image/png",
           });
 
-        expect(r.status).toBe(201);
+        expect(res.status).toBe(201);
       }
 
-      const sixth = await request(app)
+      const sixth = await requesterAAgent
         .post(`/api/tickets/${ticketId}/attachments`)
-        .field("requesterId", String(requesterAId))
+        .set("Origin", "http://localhost:5173")
         .attach("file", tinyPng, {
           filename: "sixth.png",
           contentType: "image/png",
@@ -182,12 +263,18 @@ describe("Attachments API", () => {
         },
       });
 
-      attachmentId = attachment!.id;
+      if (!attachment) {
+        throw new Error(
+          "Expected screenshot.png test attachment to exist"
+        );
+      }
+
+      attachmentId = attachment.id;
     });
 
     it("downloads an active attachment", async () => {
-      const res = await request(app).get(
-        `/api/attachments/${attachmentId}/download?requesterId=${requesterAId}`
+      const res = await requesterAAgent.get(
+        `/api/attachments/${attachmentId}/download`
       );
 
       expect(res.status).toBe(200);
@@ -195,8 +282,18 @@ describe("Attachments API", () => {
     });
 
     it("rejects download from a non-owning requester", async () => {
-      const res = await request(app).get(
-        `/api/attachments/${attachmentId}/download?requesterId=${requesterBId}`
+      const res = await requesterBAgent.get(
+        `/api/attachments/${attachmentId}/download`
+      );
+
+      expect(res.status).toBe(404);
+    });
+
+    // Lab 3 security regression:
+    // query-string requesterId cannot override authenticated ownership.
+    it("does not allow requesterId download tampering", async () => {
+      const res = await requesterBAgent.get(
+        `/api/attachments/${attachmentId}/download?requesterId=${requesterAId}`
       );
 
       expect(res.status).toBe(404);
@@ -204,29 +301,28 @@ describe("Attachments API", () => {
 
     // BR-26: reason required
     it("rejects removal without a reason", async () => {
-      const res = await request(app)
+      const res = await requesterAAgent
         .patch(`/api/attachments/${attachmentId}/remove`)
-        .send({
-          requesterId: requesterAId,
-        });
+        .set("Origin", "http://localhost:5173")
+        .send({});
 
       expect(res.status).toBe(400);
       expect(res.body.error).toBe("REASON_REQUIRED");
     });
 
     it("soft-removes with a reason, then blocks further download (BR-27)", async () => {
-      const removeRes = await request(app)
+      const removeRes = await requesterAAgent
         .patch(`/api/attachments/${attachmentId}/remove`)
+        .set("Origin", "http://localhost:5173")
         .send({
-          requesterId: requesterAId,
           reason: "Wrong screenshot attached",
         });
 
       expect(removeRes.status).toBe(200);
       expect(removeRes.body.isRemoved).toBe(true);
 
-      const downloadRes = await request(app).get(
-        `/api/attachments/${attachmentId}/download?requesterId=${requesterAId}`
+      const downloadRes = await requesterAAgent.get(
+        `/api/attachments/${attachmentId}/download`
       );
 
       expect(downloadRes.status).toBe(410);
@@ -234,9 +330,11 @@ describe("Attachments API", () => {
 
     // BR-27: removed attachment still visible as metadata
     it("still shows the removed attachment in the ticket's attachment list", async () => {
-      const res = await request(app).get(
-        `/api/tickets/${ticketId}?requesterId=${requesterAId}`
+      const res = await requesterAAgent.get(
+        `/api/tickets/${ticketId}`
       );
+
+      expect(res.status).toBe(200);
 
       const found = res.body.attachments.find(
         (a: { id: number }) => a.id === attachmentId
@@ -244,14 +342,16 @@ describe("Attachments API", () => {
 
       expect(found).toBeTruthy();
       expect(found.isRemoved).toBe(true);
-      expect(found.removedReason).toBe("Wrong screenshot attached");
+      expect(found.removedReason).toBe(
+        "Wrong screenshot attached"
+      );
     });
 
     it("rejects removing an already-removed attachment", async () => {
-      const res = await request(app)
+      const res = await requesterAAgent
         .patch(`/api/attachments/${attachmentId}/remove`)
+        .set("Origin", "http://localhost:5173")
         .send({
-          requesterId: requesterAId,
           reason: "trying again",
         });
 

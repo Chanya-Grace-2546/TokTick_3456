@@ -3,14 +3,13 @@ import { useParams, Link } from "react-router-dom";
 import {
   fetchTicketDetail,
   uploadAttachment,
-  attachmentDownloadUrl,
+  downloadAttachment,
   removeAttachment,
   TicketDetailData,
   TicketNotFoundError,
   AttachmentUploadError,
   AttachmentMeta,
 } from "../api.js";
-import { useRequester } from "../context/RequesterContext.js";
 import { zenGreen } from "../theme.js";
 
 type ScreenState = "loading" | "not-found" | "error" | "ready";
@@ -35,9 +34,9 @@ function formatBytes(bytes: number): string {
 }
 
 // Lab 2 Issue 6 — Requester Ticket Detail + Attachments
+// Lab 3 — Requester identity and ownership come from the authenticated Session.
 export default function TicketDetail() {
   const { id } = useParams<{ id: string }>();
-  const { requester } = useRequester();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [state, setState] = useState<ScreenState>("loading");
@@ -47,9 +46,11 @@ export default function TicketDetail() {
   const [removingId, setRemovingId] = useState<number | null>(null);
 
   function load() {
-    if (!requester || !id) return;
+    if (!id) return;
+
     setState("loading");
-    fetchTicketDetail(Number(id), requester.id)
+
+    fetchTicketDetail(Number(id))
       .then((data) => {
         setTicket(data);
         setState("ready");
@@ -59,16 +60,18 @@ export default function TicketDetail() {
       });
   }
 
-  useEffect(load, [id, requester]);
+  useEffect(load, [id]);
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (!file || !requester || !ticket) return;
+
+    if (!file || !ticket) return;
 
     setUploadError("");
     setUploading(true);
+
     try {
-      await uploadAttachment(ticket.id, requester.id, file);
+      await uploadAttachment(ticket.id, file);
       load();
     } catch (err) {
       if (err instanceof AttachmentUploadError) {
@@ -77,24 +80,50 @@ export default function TicketDetail() {
           FILE_TOO_LARGE: "File is too large — 5MB maximum.",
           MAX_ATTACHMENTS_REACHED: "This ticket already has 5 active attachments.",
         };
+
         setUploadError(messages[err.code] ?? "Upload failed. Please try again.");
       } else {
         setUploadError("Upload failed. Please try again.");
       }
     } finally {
       setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
+
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  }
+
+  async function handleDownload(attachment: AttachmentMeta) {
+    setUploadError("");
+
+    try {
+      const blob = await downloadAttachment(attachment.id);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+
+      link.href = url;
+      link.download = attachment.fileName;
+
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      URL.revokeObjectURL(url);
+    } catch {
+      setUploadError("Couldn't download that attachment. Please try again.");
     }
   }
 
   async function handleRemove(attachment: AttachmentMeta) {
-    if (!requester) return;
     const reason = window.prompt(`Reason for removing "${attachment.fileName}"?`);
+
     if (!reason || !reason.trim()) return;
 
     setRemovingId(attachment.id);
+
     try {
-      await removeAttachment(attachment.id, requester.id, reason.trim());
+      await removeAttachment(attachment.id, reason.trim());
       load();
     } catch {
       setUploadError("Couldn't remove that attachment. Please try again.");
@@ -144,14 +173,17 @@ export default function TicketDetail() {
             <div className="text-muted small">Ticket No.</div>
             <div className="fw-bold">{ticket.ticketNumber}</div>
           </div>
+
           <div className="col-12 col-md-6 col-lg-3">
             <div className="text-muted small">Ticket Date</div>
             <div>{new Date(ticket.createdAt).toLocaleDateString()}</div>
           </div>
+
           <div className="col-12 col-md-6 col-lg-3">
             <div className="text-muted small">Category</div>
             <div>{ticket.category}</div>
           </div>
+
           <div className="col-12 col-md-6 col-lg-3">
             <div className="text-muted small">Related System</div>
             <div>{ticket.relatedSystem}</div>
@@ -168,13 +200,18 @@ export default function TicketDetail() {
               {ticket.requestedPriority}
             </span>
           </div>
+
           <div className="col-12 col-md-6 col-lg-3">
             <div className="text-muted small">IT Priority</div>
             <div>{ticket.itPriority ?? "—"}</div>
           </div>
+
           <div className="col-12 col-md-6 col-lg-3">
             <div className="text-muted small">Current Status</div>
-            <span className="badge" style={{ backgroundColor: zenGreen.secondary }}>
+            <span
+              className="badge"
+              style={{ backgroundColor: zenGreen.secondary }}
+            >
               {ticket.currentStatus}
             </span>
           </div>
@@ -196,6 +233,7 @@ export default function TicketDetail() {
           <h2 className="h5 mb-0" style={{ color: zenGreen.text }}>
             Attachments ({activeAttachments.length}/5)
           </h2>
+
           <div>
             <input
               ref={fileInputRef}
@@ -206,6 +244,7 @@ export default function TicketDetail() {
               onChange={handleFileChange}
               disabled={uploading || activeAttachments.length >= 5}
             />
+
             <label
               htmlFor="attachment-file"
               className="btn btn-sm"
@@ -213,7 +252,10 @@ export default function TicketDetail() {
                 backgroundColor: zenGreen.primary,
                 color: "white",
                 opacity: uploading || activeAttachments.length >= 5 ? 0.6 : 1,
-                cursor: uploading || activeAttachments.length >= 5 ? "not-allowed" : "pointer",
+                cursor:
+                  uploading || activeAttachments.length >= 5
+                    ? "not-allowed"
+                    : "pointer",
               }}
             >
               {uploading ? "Uploading…" : "+ Add Attachment"}
@@ -238,25 +280,38 @@ export default function TicketDetail() {
                 style={a.isRemoved ? { opacity: 0.6 } : undefined}
               >
                 <div>
-                  <div style={a.isRemoved ? { textDecoration: "line-through" } : undefined}>
+                  <div
+                    style={
+                      a.isRemoved
+                        ? { textDecoration: "line-through" }
+                        : undefined
+                    }
+                  >
                     {a.fileName}{" "}
-                    <span className="text-muted small">({formatBytes(a.sizeBytes)})</span>
+                    <span className="text-muted small">
+                      ({formatBytes(a.sizeBytes)})
+                    </span>
                   </div>
+
                   {a.isRemoved && (
                     <div className="text-muted small">
-                      Removed {new Date(a.removedAt!).toLocaleDateString()} — {a.removedReason}
+                      Removed {new Date(a.removedAt!).toLocaleDateString()} —{" "}
+                      {a.removedReason}
                     </div>
                   )}
                 </div>
+
                 <div className="d-flex gap-2">
-                  {!a.isRemoved && requester && (
+                  {!a.isRemoved && (
                     <>
-                      <a
-                        href={attachmentDownloadUrl(a.id, requester.id)}
+                      <button
+                        type="button"
                         className="btn btn-sm btn-outline-secondary"
+                        onClick={() => handleDownload(a)}
                       >
                         Download
-                      </a>
+                      </button>
+
                       <button
                         type="button"
                         className="btn btn-sm btn-outline-danger"

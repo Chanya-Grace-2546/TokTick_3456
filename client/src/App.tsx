@@ -1,52 +1,164 @@
-import { Routes, Route } from "react-router-dom";
-import { RequesterProvider } from "./context/RequesterContext.js";
-import RequesterGuard from "./components/RequesterGuard.js";
-import RequesterSelection from "./pages/RequesterSelection.js";
+import {
+  Navigate,
+  Route,
+  Routes,
+} from "react-router-dom";
+import {
+  AuthProvider,
+  useAuth,
+} from "./context/AuthContext.js";
+import AuthGuard from "./components/AuthGuard.js";
+import AppShell from "./components/AppShell.js";
+import Login from "./pages/Login.js";
+import ChangePassword from "./pages/ChangePassword.js";
 import HealthCheck from "./pages/HealthCheck.js";
-import TicketsPlaceholder from "./pages/MyTickets.js";
+import MyTickets from "./pages/MyTickets.js";
 import CreateTicket from "./pages/CreateTicket.js";
 import TicketDetail from "./pages/TicketDetail.js";
-import AppShell from "./components/AppShell.js";
 
-// Lab 2 router shell. "/" is the Development Requester Selection screen
-// (BR-04). "/tickets" is My Tickets (Issue 5). "/tickets/new" is Create
-// Ticket (Issue 4). "/tickets/:id" is Requester Ticket Detail (Issue 6).
-// All three are gated by RequesterGuard per BR-07. "/dev-check" keeps
-// Lab 1's demo reachable. AppShell wraps everything so the Zen Green
-// header/nav (handout §8) is consistent across every screen.
+function HomeRedirect() {
+  const { user, loading } =
+    useAuth();
+
+  if (loading) {
+    return (
+      <div className="container py-5 text-center">
+        Loading...
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <Navigate
+        to="/login"
+        replace
+      />
+    );
+  }
+
+  if (
+    user.mustChangePassword
+  ) {
+    return (
+      <Navigate
+        to="/change-password"
+        replace
+      />
+    );
+  }
+
+  if (
+    user.role === "REQUESTER"
+  ) {
+    return (
+      <Navigate
+        to="/tickets"
+        replace
+      />
+    );
+  }
+
+  return (
+    <div className="container py-5">
+      <h1 className="h4">
+        TokTickIT
+      </h1>
+
+      <p className="mb-1">
+        Signed in as {user.name}.
+      </p>
+
+      <p className="text-muted">
+        Role: {user.role}
+      </p>
+
+      <p>
+        Staff and Administrator
+        workspaces will be added in
+        the next Lab 3 issues.
+      </p>
+    </div>
+  );
+}
+
 export default function App() {
   return (
-    <RequesterProvider>
+    <AuthProvider>
       <AppShell>
         <Routes>
-          <Route path="/" element={<RequesterSelection />} />
+          <Route
+            path="/"
+            element={
+              <HomeRedirect />
+            }
+          />
+
+          <Route
+            path="/login"
+            element={<Login />}
+          />
+
+          <Route
+            path="/change-password"
+            element={
+              <AuthGuard
+                allowPasswordChange
+              >
+                <ChangePassword />
+              </AuthGuard>
+            }
+          />
+
           <Route
             path="/tickets"
             element={
-              <RequesterGuard>
-                <TicketsPlaceholder />
-              </RequesterGuard>
+              <AuthGuard
+                roles={["REQUESTER"]}
+              >
+                <MyTickets />
+              </AuthGuard>
             }
           />
+
           <Route
             path="/tickets/new"
             element={
-              <RequesterGuard>
+              <AuthGuard
+                roles={["REQUESTER"]}
+              >
                 <CreateTicket />
-              </RequesterGuard>
+              </AuthGuard>
             }
           />
+
           <Route
             path="/tickets/:id"
             element={
-              <RequesterGuard>
+              <AuthGuard
+                roles={["REQUESTER"]}
+              >
                 <TicketDetail />
-              </RequesterGuard>
+              </AuthGuard>
             }
           />
-          <Route path="/dev-check" element={<HealthCheck />} />
+
+          <Route
+            path="/dev-check"
+            element={<HealthCheck />}
+          />
+
+          <Route
+            path="*"
+            element={
+              <Navigate
+                to="/"
+                replace
+              />
+            }
+          />
         </Routes>
       </AppShell>
-    </RequesterProvider>
+    </AuthProvider>
   );
 }

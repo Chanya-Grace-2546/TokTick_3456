@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
+import bcrypt from "bcryptjs";
 import { app } from "../../src/app.js";
 import { getPrisma } from "../../src/prisma.js";
 
@@ -9,15 +10,21 @@ describe("POST /api/tickets", () => {
   let categoryId: number;
   let relatedSystemId: number;
 
-  const testPasswordHash = "test-password-hash";
+  const testPassword = "TestPassword1!";
+  const activeEmail = "create.active@example.com";
+  const inactiveEmail = "create.inactive@example.com";
+
+  const activeAgent = request.agent(app);
 
   beforeAll(async () => {
     const prisma = getPrisma();
 
+    const testPasswordHash = await bcrypt.hash(testPassword, 12);
+
     const active = await prisma.user.create({
       data: {
         name: "Create Ticket Active",
-        email: "create.active@example.com",
+        email: activeEmail,
         passwordHash: testPasswordHash,
         role: "REQUESTER",
         isActive: true,
@@ -28,7 +35,7 @@ describe("POST /api/tickets", () => {
     const inactive = await prisma.user.create({
       data: {
         name: "Create Ticket Inactive",
-        email: "create.inactive@example.com",
+        email: inactiveEmail,
         passwordHash: testPasswordHash,
         role: "REQUESTER",
         isActive: false,
@@ -52,6 +59,17 @@ describe("POST /api/tickets", () => {
     inactiveRequesterId = inactive.id;
     categoryId = category.id;
     relatedSystemId = relatedSystem.id;
+
+    // Lab 3 authentication:
+    // log in once and keep the Session cookie for the requester tests.
+    const loginRes = await activeAgent
+      .post("/api/auth/login")
+      .send({
+        email: activeEmail,
+        password: testPassword,
+      });
+
+    expect(loginRes.status).toBe(200);
   });
 
   afterAll(async () => {
@@ -86,6 +104,15 @@ describe("POST /api/tickets", () => {
       });
     }
 
+    // Sessions reference User, so delete them before deleting test Users.
+    await prisma.session.deleteMany({
+      where: {
+        userId: {
+          in: [activeRequesterId, inactiveRequesterId],
+        },
+      },
+    });
+
     await prisma.user.deleteMany({
       where: {
         id: {
@@ -97,7 +124,6 @@ describe("POST /api/tickets", () => {
 
   function validPayload(overrides: Record<string, unknown> = {}) {
     return {
-      requesterId: activeRequesterId,
       categoryId,
       relatedSystemId,
       summary: "Laptop battery drains quickly",
@@ -108,22 +134,37 @@ describe("POST /api/tickets", () => {
     };
   }
 
-  // AC-01
-  it("creates a Ticket and returns a generated Ticket Number", async () => {
+  // Lab 3: protected Requester route requires authentication.
+  it("rejects an unauthenticated ticket creation request", async () => {
     const res = await request(app)
       .post("/api/tickets")
+      .send(validPayload());
+
+    expect(res.status).toBe(401);
+    expect(res.body.error).toBe("UNAUTHENTICATED");
+  });
+
+  // AC-01
+  it("creates a Ticket and returns a generated Ticket Number", async () => {
+    const res = await activeAgent
+      .post("/api/tickets")
+      .set("Origin", "http://localhost:5173")
       .send(validPayload());
 
     expect(res.status).toBe(201);
     expect(res.body.ticketNumber).toMatch(/^TKT-\d{4}-\d{6}$/);
     expect(res.body.status).toBe("NEW");
     expect(res.body.requesterId).toBe(activeRequesterId);
+
+    // Lab 3: initial IT Priority copies Requested Priority.
+    expect(res.body.itPriority).toBe("MEDIUM");
   });
 
   // AC-04, BR-14
   it("rejects a Summary shorter than 5 characters with a field-level message", async () => {
-    const res = await request(app)
+    const res = await activeAgent
       .post("/api/tickets")
+      .set("Origin", "http://localhost:5173")
       .send(validPayload({ summary: "Hi" }));
 
     expect(res.status).toBe(400);
@@ -133,8 +174,9 @@ describe("POST /api/tickets", () => {
 
   // BR-15
   it("rejects a Description shorter than 10 characters", async () => {
-    const res = await request(app)
+    const res = await activeAgent
       .post("/api/tickets")
+      .set("Origin", "http://localhost:5173")
       .send(validPayload({ description: "too short" }));
 
     expect(res.status).toBe(400);
@@ -143,22 +185,46 @@ describe("POST /api/tickets", () => {
 
   // BR-16
   it("rejects an unknown categoryId", async () => {
-    const res = await request(app)
+    const res = await activeAgent
       .post("/api/tickets")
+      .set("Origin", "http://localhost:5173")
       .send(validPayload({ categoryId: 999999 }));
 
     expect(res.status).toBe(400);
     expect(res.body.fields.categoryId).toBeTruthy();
   });
 
-  // BR-05 / AC-13-adjacent: inactive Requester cannot create tickets
-  it("rejects an inactive Requester with 404", async () => {
+  // Lab 3 replaces client-supplied requesterId with authenticated identity.
+  // An inactive Requester must be rejected at login using the same public
+  // invalid-credentials response as an unknown email or wrong password.
+  it("rejects login for an inactive Requester with the generic invalid-credentials response", async () => {
     const res = await request(app)
-      .post("/api/tickets")
-      .send(validPayload({ requesterId: inactiveRequesterId }));
+      .post("/api/auth/login")
+      .send({
+        email: inactiveEmail,
+        password: testPassword,
+      });
 
-    expect(res.status).toBe(404);
-    expect(res.body.error).toBe("REQUESTER_NOT_FOUND");
+    expect(res.status).toBe(401);
+    expect(res.body.error).toBe("INVALID_CREDENTIALS");
+  });
+
+  // Lab 3 security regression:
+  // requesterId supplied by the browser must not change ticket ownership.
+  it("ignores a client-supplied requesterId and uses the authenticated Requester", async () => {
+    const res = await activeAgent
+      .post("/api/tickets")
+      .set("Origin", "http://localhost:5173")
+      .send(
+        validPayload({
+          requesterId: inactiveRequesterId,
+          summary: "Authenticated identity ownership test",
+        })
+      );
+
+    expect(res.status).toBe(201);
+    expect(res.body.requesterId).toBe(activeRequesterId);
+    expect(res.body.requesterId).not.toBe(inactiveRequesterId);
   });
 
   // BR-18: duplicate-submission guard
@@ -167,15 +233,18 @@ describe("POST /api/tickets", () => {
       summary: "Duplicate guard test summary",
     });
 
-    const first = await request(app)
+    const first = await activeAgent
       .post("/api/tickets")
+      .set("Origin", "http://localhost:5173")
       .send(payload);
 
-    const second = await request(app)
+    const second = await activeAgent
       .post("/api/tickets")
+      .set("Origin", "http://localhost:5173")
       .send(payload);
 
     expect(first.status).toBe(201);
+    expect(second.status).toBe(200);
     expect(second.body.id).toBe(first.body.id);
     expect(second.body.ticketNumber).toBe(first.body.ticketNumber);
   });
