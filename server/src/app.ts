@@ -16,6 +16,7 @@ import {
   requireAuth,
   requirePasswordChanged,
   requireRole,
+  requireSameOrigin,
   SESSION_COOKIE_NAME,
   SESSION_DURATION_MS,
   sessionCookieOptions,
@@ -30,9 +31,12 @@ const MAX_ACTIVE_ATTACHMENTS = 5;
 // Supertest can import `app` without opening a port. Do not merge these files.
 export const app = express();
 
+const CLIENT_ORIGIN =
+  process.env.CLIENT_ORIGIN ?? "http://localhost:5173";
+
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: CLIENT_ORIGIN,
     credentials: true,
   })
 );
@@ -143,17 +147,11 @@ app.post("/api/auth/login", async (req: Request, res: Response) => {
       },
     });
 
-    // Use the same response for an unknown email and a wrong password.
-    if (!user) {
+    // Use the same public response for an unknown email, wrong password,
+    // and inactive account so the endpoint does not reveal account status.
+    if (!user || !user.isActive) {
       res.status(401).json({
         error: "INVALID_CREDENTIALS",
-      });
-      return;
-    }
-
-    if (!user.isActive) {
-      res.status(403).json({
-        error: "ACCOUNT_INACTIVE",
       });
       return;
     }
@@ -210,22 +208,26 @@ app.post("/api/auth/login", async (req: Request, res: Response) => {
 });
 
 // POST /api/auth/logout
-// Delete the current server-side Session and clear its cookie.
+// Invalidate the current server-side Session and clear its cookie.
 app.post(
   "/api/auth/logout",
   requireAuth,
+  requireSameOrigin,
   async (req: AuthenticatedRequest, res: Response) => {
     try {
       const prisma = getPrisma();
 
       if (req.sessionId) {
-        await prisma.session.deleteMany({
-          where: {
-            id: req.sessionId,
-          },
-        });
-      }
-
+  await prisma.session.updateMany({
+    where: {
+      id: req.sessionId,
+      invalidatedAt: null,
+    },
+    data: {
+      invalidatedAt: new Date(),
+    },
+  });
+}
       res.clearCookie(SESSION_COOKIE_NAME, {
         httpOnly: true,
         sameSite: "lax",
@@ -261,10 +263,11 @@ app.get(
 // POST /api/auth/change-password
 // Verify the current password, enforce the Lab 3 password policy,
 // replace the password hash, clear mustChangePassword, and invalidate
-// every Session belonging to this User.
+// every other Session while keeping the current Session authenticated.
 app.post(
   "/api/auth/change-password",
   requireAuth,
+  requireSameOrigin,
   async (req: AuthenticatedRequest, res: Response) => {
     const { currentPassword, newPassword } = req.body as {
       currentPassword?: string;
@@ -349,24 +352,24 @@ app.post(
           },
         }),
 
-        // Password changes invalidate all Sessions.
-        prisma.session.deleteMany({
-          where: {
-            userId: user.id,
-          },
-        }),
+        // BR-08: keep the current Session authenticated after the password
+// change, while invalidating every other Session for this User.
+prisma.session.updateMany({
+  where: {
+    userId: user.id,
+    id: {
+      not: req.sessionId!,
+    },
+    invalidatedAt: null,
+  },
+  data: {
+    invalidatedAt: new Date(),
+  },
+}),
       ]);
-
-      res.clearCookie(SESSION_COOKIE_NAME, {
-        httpOnly: true,
-        sameSite: "lax",
-        secure: process.env.NODE_ENV === "production",
-        path: "/",
-      });
 
       res.status(200).json({
         success: true,
-        requiresLogin: true,
       });
     } catch (error) {
       console.error(
@@ -628,6 +631,7 @@ app.get(
 app.post(
   "/api/tickets",
   requireAuth,
+  requireSameOrigin,
   requirePasswordChanged,
   requireRole("REQUESTER"),
   async (
@@ -1043,6 +1047,7 @@ app.get(
 app.post(
   "/api/tickets/:id/attachments",
   requireAuth,
+  requireSameOrigin,
   requirePasswordChanged,
   requireRole("REQUESTER"),
   upload.single("file"),
@@ -1354,6 +1359,7 @@ app.get(
 app.patch(
   "/api/attachments/:id/remove",
   requireAuth,
+  requireSameOrigin,
   requirePasswordChanged,
   requireRole("REQUESTER"),
   async (

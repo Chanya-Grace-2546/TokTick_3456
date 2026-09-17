@@ -71,10 +71,24 @@ export async function requireAuth(
       },
     });
 
-    if (!session || session.expiresAt <= new Date()) {
-      if (session) {
+    if (
+      !session ||
+      session.invalidatedAt ||
+      session.expiresAt <= new Date()
+    ) {
+      if (
+        session &&
+        !session.invalidatedAt
+      ) {
         await prisma.session
-          .delete({ where: { id: session.id } })
+          .update({
+            where: {
+              id: session.id,
+            },
+            data: {
+              invalidatedAt: new Date(),
+            },
+          })
           .catch(() => {});
       }
 
@@ -83,11 +97,17 @@ export async function requireAuth(
     }
 
     if (!session.user.isActive) {
-      await prisma.session.deleteMany({
-        where: { userId: session.user.id },
+      await prisma.session.updateMany({
+        where: {
+          userId: session.user.id,
+          invalidatedAt: null,
+        },
+        data: {
+          invalidatedAt: new Date(),
+        },
       });
 
-      res.status(401).json({ error: "ACCOUNT_INACTIVE" });
+      res.status(401).json({ error: "UNAUTHENTICATED" });
       return;
     }
 
@@ -99,6 +119,42 @@ export async function requireAuth(
     console.error("Authentication check failed:", error);
     res.status(500).json({ error: "UNEXPECTED_ERROR" });
   }
+}
+
+// Lab 3 BR-12:
+// Authenticated state-changing requests that use the Session cookie must
+// originate from the configured TokTickIT client origin.
+//
+// GET, HEAD, and OPTIONS do not change application state and are allowed.
+// State-changing authenticated requests must include an Origin header that
+// exactly matches the configured client origin.
+export function requireSameOrigin(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) {
+  if (
+    req.method === "GET" ||
+    req.method === "HEAD" ||
+    req.method === "OPTIONS"
+  ) {
+    next();
+    return;
+  }
+
+  const origin = req.get("origin");
+
+  const allowedOrigin =
+    process.env.CLIENT_ORIGIN ?? "http://localhost:5173";
+
+  if (!origin || origin !== allowedOrigin) {
+    res.status(403).json({
+      error: "INVALID_ORIGIN",
+    });
+    return;
+  }
+
+  next();
 }
 
 export function requirePasswordChanged(

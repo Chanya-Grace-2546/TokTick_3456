@@ -23,10 +23,15 @@ import * as api from "../../src/api.js";
 const requester: api.AuthUser = {
   id: 1,
   name: "Jennifer Anderson",
-  email: "jennifer@example.com",
+  email: "jennifer.anderson@example.com",
   role: "REQUESTER",
   isActive: true,
   mustChangePassword: true,
+};
+
+const changedRequester: api.AuthUser = {
+  ...requester,
+  mustChangePassword: false,
 };
 
 function renderScreen() {
@@ -42,8 +47,8 @@ function renderScreen() {
           />
 
           <Route
-            path="/login"
-            element={<div>Login Screen</div>}
+            path="/"
+            element={<div>Application Home</div>}
           />
         </Routes>
       </AuthProvider>
@@ -160,7 +165,7 @@ describe("ChangePassword", () => {
       "changePassword"
     ).mockRejectedValue(
       new Error(
-        "INVALID_CURRENT_PASSWORD"
+        "CURRENT_PASSWORD_INCORRECT"
       )
     );
 
@@ -188,7 +193,7 @@ describe("ChangePassword", () => {
       "changePassword"
     ).mockRejectedValue(
       new Error(
-        "PASSWORD_REUSE_NOT_ALLOWED"
+        "NEW_PASSWORD_MUST_BE_DIFFERENT"
       )
     );
 
@@ -220,7 +225,9 @@ describe("ChangePassword", () => {
       api,
       "changePassword"
     ).mockRejectedValue(
-      new Error("INVALID_PASSWORD")
+      new Error(
+        "PASSWORD_REQUIREMENTS_NOT_MET"
+      )
     );
 
     renderScreen();
@@ -246,10 +253,16 @@ describe("ChangePassword", () => {
     });
   });
 
-  it("changes the password and returns to Login", async () => {
+  it("changes the password, refreshes the authenticated user, and continues to the application", async () => {
     const changeSpy = vi
       .spyOn(api, "changePassword")
       .mockResolvedValue();
+
+    const getMeSpy = vi.spyOn(api, "getMe");
+
+    getMeSpy
+      .mockResolvedValueOnce(requester)
+      .mockResolvedValueOnce(changedRequester);
 
     const logoutSpy = vi
       .spyOn(api, "logout")
@@ -273,11 +286,12 @@ describe("ChangePassword", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText("Login Screen")
+        screen.getByText("Application Home")
       ).toBeInTheDocument();
     });
 
-    expect(logoutSpy).toHaveBeenCalled();
+    expect(getMeSpy).toHaveBeenCalledTimes(2);
+    expect(logoutSpy).not.toHaveBeenCalled();
   });
 
   it("disables the button while changing the password", async () => {

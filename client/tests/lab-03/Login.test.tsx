@@ -55,7 +55,8 @@ function requester(
   return {
     id: 1,
     name: "Jennifer Anderson",
-    email: "jennifer@example.com",
+    email:
+      "jennifer.anderson@example.com",
     role: "REQUESTER",
     isActive: true,
     mustChangePassword,
@@ -73,7 +74,8 @@ async function enterCredentials() {
     screen.getByLabelText(/email/i),
     {
       target: {
-        value: "jennifer@example.com",
+        value:
+          "jennifer.anderson@example.com",
       },
     }
   );
@@ -135,7 +137,7 @@ describe("Login", () => {
 
     await waitFor(() => {
       expect(loginSpy).toHaveBeenCalledWith(
-        "jennifer@example.com",
+        "jennifer.anderson@example.com",
         "ChangeMe1!"
       );
     });
@@ -193,9 +195,11 @@ describe("Login", () => {
     });
   });
 
-  it("shows an inactive-account message", async () => {
+  it("does not reveal inactive account status", async () => {
+    // The backend intentionally returns INVALID_CREDENTIALS for an
+    // inactive account, the same as an unknown email or wrong password.
     vi.spyOn(api, "login").mockRejectedValue(
-      new Error("ACCOUNT_INACTIVE")
+      new Error("INVALID_CREDENTIALS")
     );
 
     renderScreen();
@@ -211,9 +215,15 @@ describe("Login", () => {
       expect(
         screen.getByRole("alert")
       ).toHaveTextContent(
-        /account is inactive/i
+        /invalid email or password/i
       );
     });
+
+    expect(
+      screen.queryByText(
+        /account is inactive/i
+      )
+    ).not.toBeInTheDocument();
   });
 
   it("disables Sign in while login is in progress", async () => {

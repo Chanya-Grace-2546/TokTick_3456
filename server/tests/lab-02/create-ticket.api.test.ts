@@ -148,6 +148,7 @@ describe("POST /api/tickets", () => {
   it("creates a Ticket and returns a generated Ticket Number", async () => {
     const res = await activeAgent
       .post("/api/tickets")
+      .set("Origin", "http://localhost:5173")
       .send(validPayload());
 
     expect(res.status).toBe(201);
@@ -163,6 +164,7 @@ describe("POST /api/tickets", () => {
   it("rejects a Summary shorter than 5 characters with a field-level message", async () => {
     const res = await activeAgent
       .post("/api/tickets")
+      .set("Origin", "http://localhost:5173")
       .send(validPayload({ summary: "Hi" }));
 
     expect(res.status).toBe(400);
@@ -174,6 +176,7 @@ describe("POST /api/tickets", () => {
   it("rejects a Description shorter than 10 characters", async () => {
     const res = await activeAgent
       .post("/api/tickets")
+      .set("Origin", "http://localhost:5173")
       .send(validPayload({ description: "too short" }));
 
     expect(res.status).toBe(400);
@@ -184,6 +187,7 @@ describe("POST /api/tickets", () => {
   it("rejects an unknown categoryId", async () => {
     const res = await activeAgent
       .post("/api/tickets")
+      .set("Origin", "http://localhost:5173")
       .send(validPayload({ categoryId: 999999 }));
 
     expect(res.status).toBe(400);
@@ -191,8 +195,9 @@ describe("POST /api/tickets", () => {
   });
 
   // Lab 3 replaces client-supplied requesterId with authenticated identity.
-  // An inactive Requester must be rejected at login.
-  it("rejects login for an inactive Requester", async () => {
+  // An inactive Requester must be rejected at login using the same public
+  // invalid-credentials response as an unknown email or wrong password.
+  it("rejects login for an inactive Requester with the generic invalid-credentials response", async () => {
     const res = await request(app)
       .post("/api/auth/login")
       .send({
@@ -200,8 +205,8 @@ describe("POST /api/tickets", () => {
         password: testPassword,
       });
 
-    expect(res.status).toBe(403);
-    expect(res.body.error).toBe("ACCOUNT_INACTIVE");
+    expect(res.status).toBe(401);
+    expect(res.body.error).toBe("INVALID_CREDENTIALS");
   });
 
   // Lab 3 security regression:
@@ -209,6 +214,7 @@ describe("POST /api/tickets", () => {
   it("ignores a client-supplied requesterId and uses the authenticated Requester", async () => {
     const res = await activeAgent
       .post("/api/tickets")
+      .set("Origin", "http://localhost:5173")
       .send(
         validPayload({
           requesterId: inactiveRequesterId,
@@ -229,10 +235,12 @@ describe("POST /api/tickets", () => {
 
     const first = await activeAgent
       .post("/api/tickets")
+      .set("Origin", "http://localhost:5173")
       .send(payload);
 
     const second = await activeAgent
       .post("/api/tickets")
+      .set("Origin", "http://localhost:5173")
       .send(payload);
 
     expect(first.status).toBe(201);

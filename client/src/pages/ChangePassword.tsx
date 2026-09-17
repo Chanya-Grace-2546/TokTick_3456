@@ -9,7 +9,7 @@ import { zenGreen } from "../theme.js";
 
 // Lab 3 Issue 3 — Forced initial-password change
 export default function ChangePassword() {
-  const { user, logout } = useAuth();
+  const { user, refreshUser } = useAuth();
   const navigate = useNavigate();
 
   const [currentPassword, setCurrentPassword] =
@@ -49,11 +49,12 @@ export default function ChangePassword() {
         newPassword
       );
 
-      // The server invalidates all Sessions after a successful
-      // password change, so the user must authenticate again.
-      await logout().catch(() => {});
+      // BR-08:
+      // The successful password change keeps the current Session
+      // authenticated. Refresh the User so mustChangePassword becomes false.
+      await refreshUser();
 
-      navigate("/login", {
+      navigate("/", {
         replace: true,
       });
     } catch (error) {
@@ -62,13 +63,22 @@ export default function ChangePassword() {
           ? error.message
           : "CHANGE_PASSWORD_FAILED";
 
-      if (code === "INVALID_CURRENT_PASSWORD") {
+      if (
+        code === "CURRENT_PASSWORD_INCORRECT" ||
+        code === "INVALID_CURRENT_PASSWORD"
+      ) {
         setError("Current password is incorrect.");
-      } else if (code === "PASSWORD_REUSE_NOT_ALLOWED") {
+      } else if (
+        code === "NEW_PASSWORD_MUST_BE_DIFFERENT" ||
+        code === "PASSWORD_REUSE_NOT_ALLOWED"
+      ) {
         setError(
           "New password must be different from your current password."
         );
-      } else if (code === "INVALID_PASSWORD") {
+      } else if (
+        code === "PASSWORD_REQUIREMENTS_NOT_MET" ||
+        code === "INVALID_PASSWORD"
+      ) {
         setError(
           "Password must be 10–72 characters and include uppercase, lowercase, number, and special character."
         );

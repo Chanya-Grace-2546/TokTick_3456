@@ -78,23 +78,13 @@ export default function Login() {
           replace: true,
         });
       }
-    } catch (error) {
-      const code =
-        error instanceof Error
-          ? error.message
-          : "LOGIN_FAILED";
-
-      if (
-        code === "ACCOUNT_INACTIVE"
-      ) {
-        setError(
-          "This account is inactive."
-        );
-      } else {
-        setError(
-          "Invalid email or password."
-        );
-      }
+    } catch {
+      // Lab 3 BR-03 / BR-06:
+      // Invalid credentials and inactive accounts use the same public
+      // message so the Login screen does not reveal account status.
+      setError(
+        "Invalid email or password."
+      );
     } finally {
       setSubmitting(false);
     }

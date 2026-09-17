@@ -150,7 +150,7 @@ describe("Lab 3 Authentication API", () => {
     expect(res.body.error).toBe("INVALID_CREDENTIALS");
   });
 
-  it("rejects an inactive account", async () => {
+  it("rejects an inactive account with the same invalid-credentials response", async () => {
     const res = await request(app)
       .post("/api/auth/login")
       .send({
@@ -158,8 +158,8 @@ describe("Lab 3 Authentication API", () => {
         password,
       });
 
-    expect(res.status).toBe(403);
-    expect(res.body.error).toBe("ACCOUNT_INACTIVE");
+    expect(res.status).toBe(401);
+    expect(res.body.error).toBe("INVALID_CREDENTIALS");
   });
 
   it("requires both email and password", async () => {
@@ -268,7 +268,9 @@ describe("Lab 3 Authentication API", () => {
 
     expect(beforeLogout.status).toBe(200);
 
-    const logoutRes = await agent.post("/api/auth/logout");
+    const logoutRes = await agent
+      .post("/api/auth/logout")
+      .set("Origin", "http://localhost:5173");
 
     expect(logoutRes.status).toBe(200);
     expect(logoutRes.body.success).toBe(true);
@@ -277,6 +279,78 @@ describe("Lab 3 Authentication API", () => {
 
     expect(afterLogout.status).toBe(401);
     expect(afterLogout.body.error).toBe("UNAUTHENTICATED");
+  });
+
+  // -------------------------------------------------------------------------
+  // Same-origin protection
+  // -------------------------------------------------------------------------
+
+  it("rejects authenticated state-changing requests with no Origin header", async () => {
+    const agent = request.agent(app);
+
+    const loginRes = await agent
+      .post("/api/auth/login")
+      .send({
+        email: requesterEmail,
+        password,
+      });
+
+    expect(loginRes.status).toBe(200);
+
+    const res = await agent.post("/api/auth/logout");
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).toBe("INVALID_ORIGIN");
+
+    // The rejected request must not have invalidated the Session.
+    const meRes = await agent.get("/api/auth/me");
+
+    expect(meRes.status).toBe(200);
+  });
+
+  it("rejects authenticated state-changing requests from another Origin", async () => {
+    const agent = request.agent(app);
+
+    const loginRes = await agent
+      .post("/api/auth/login")
+      .send({
+        email: requesterEmail,
+        password,
+      });
+
+    expect(loginRes.status).toBe(200);
+
+    const res = await agent
+      .post("/api/auth/logout")
+      .set("Origin", "https://evil.example");
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).toBe("INVALID_ORIGIN");
+
+    // The rejected request must not have invalidated the Session.
+    const meRes = await agent.get("/api/auth/me");
+
+    expect(meRes.status).toBe(200);
+  });
+
+  it("allows an authenticated state-changing request from the configured client Origin", async () => {
+    const agent = request.agent(app);
+
+    const loginRes = await agent
+      .post("/api/auth/login")
+      .send({
+        email: requesterEmail,
+        password,
+      });
+
+    expect(loginRes.status).toBe(200);
+
+    const res = await agent
+      .post("/api/auth/logout")
+      .set("Origin", "http://localhost:5173");
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
   });
 
   // -------------------------------------------------------------------------
@@ -297,6 +371,7 @@ describe("Lab 3 Authentication API", () => {
 
     const res = await agent
       .post("/api/auth/change-password")
+      .set("Origin", "http://localhost:5173")
       .send({
         currentPassword: "WrongPassword1!",
         newPassword,
@@ -320,6 +395,7 @@ describe("Lab 3 Authentication API", () => {
 
     const res = await agent
       .post("/api/auth/change-password")
+      .set("Origin", "http://localhost:5173")
       .send({
         currentPassword: password,
         newPassword: "short",
@@ -343,6 +419,7 @@ describe("Lab 3 Authentication API", () => {
 
     const res = await agent
       .post("/api/auth/change-password")
+      .set("Origin", "http://localhost:5173")
       .send({
         currentPassword: password,
         newPassword: password,
@@ -352,7 +429,7 @@ describe("Lab 3 Authentication API", () => {
     expect(res.body.error).toBe("NEW_PASSWORD_MUST_BE_DIFFERENT");
   });
 
-  it("changes the password, clears mustChangePassword, and invalidates existing Sessions", async () => {
+  it("changes the password, clears mustChangePassword, keeps the current Session, and invalidates other Sessions", async () => {
     const prisma = getPrisma();
 
     const agentA = request.agent(app);
@@ -377,6 +454,7 @@ describe("Lab 3 Authentication API", () => {
 
     const changeRes = await agentA
       .post("/api/auth/change-password")
+      .set("Origin", "http://localhost:5173")
       .send({
         currentPassword: password,
         newPassword,
@@ -384,7 +462,6 @@ describe("Lab 3 Authentication API", () => {
 
     expect(changeRes.status).toBe(200);
     expect(changeRes.body.success).toBe(true);
-    expect(changeRes.body.requiresLogin).toBe(true);
 
     const updatedUser = await prisma.user.findUnique({
       where: {
@@ -402,20 +479,35 @@ describe("Lab 3 Authentication API", () => {
 
     expect(passwordMatches).toBe(true);
 
-    // All old Sessions must have been deleted.
-    const sessionCount = await prisma.session.count({
-      where: {
-        userId: requesterId,
-      },
-    });
+    // BR-08: the Session performing the password change remains active.
+    // Other Sessions for the User are invalidated.
+    const sessions = await prisma.session.findMany({
+  where: {
+    userId: requesterId,
+  },
+});
 
-    expect(sessionCount).toBe(0);
+const activeSessions = sessions.filter(
+  (session) => session.invalidatedAt === null
+);
 
-    const oldSessionA = await agentA.get("/api/auth/me");
-    const oldSessionB = await agentB.get("/api/auth/me");
+const invalidatedSessions = sessions.filter(
+  (session) => session.invalidatedAt !== null
+);
 
-    expect(oldSessionA.status).toBe(401);
-    expect(oldSessionB.status).toBe(401);
+// BR-08: only the Session that performed the password change
+// remains active. Every other Session for this User is invalidated.
+expect(activeSessions).toHaveLength(1);
+expect(invalidatedSessions.length).toBeGreaterThanOrEqual(1);
+
+    const currentSession = await agentA.get("/api/auth/me");
+    const otherSession = await agentB.get("/api/auth/me");
+
+    expect(currentSession.status).toBe(200);
+    expect(currentSession.body.user.mustChangePassword).toBe(false);
+
+    expect(otherSession.status).toBe(401);
+    expect(otherSession.body.error).toBe("UNAUTHENTICATED");
 
     // Old password must no longer work.
     const oldPasswordLogin = await request(app)
@@ -438,7 +530,7 @@ describe("Lab 3 Authentication API", () => {
     expect(newPasswordLogin.status).toBe(200);
   });
 
-    // -------------------------------------------------------------------------
+  // -------------------------------------------------------------------------
   // Forced initial-password change
   // -------------------------------------------------------------------------
 
@@ -494,21 +586,24 @@ describe("Lab 3 Authentication API", () => {
 
       // The password-change endpoint itself must remain available.
       const changeRes = await agent
-        .post("/api/auth/change-password")
-        .send({
-          currentPassword: initialPassword,
-          newPassword: changedPassword,
-        });
+  .post("/api/auth/change-password")
+  .set("Origin", "http://localhost:5173")
+  .send({
+    currentPassword: initialPassword,
+    newPassword: changedPassword,
+  });
 
       expect(changeRes.status).toBe(200);
       expect(changeRes.body.success).toBe(true);
-      expect(changeRes.body.requiresLogin).toBe(true);
 
-      // Password change invalidates all existing Sessions.
-      const oldSessionRes = await agent.get("/api/auth/me");
+      // BR-08: the current Session remains authenticated after the
+      // successful mandatory password change.
+      const currentSessionRes = await agent.get("/api/auth/me");
 
-      expect(oldSessionRes.status).toBe(401);
-      expect(oldSessionRes.body.error).toBe("UNAUTHENTICATED");
+      expect(currentSessionRes.status).toBe(200);
+      expect(
+        currentSessionRes.body.user.mustChangePassword
+      ).toBe(false);
 
       const updatedUser = await prisma.user.findUnique({
         where: {
@@ -519,23 +614,31 @@ describe("Lab 3 Authentication API", () => {
       expect(updatedUser).not.toBeNull();
       expect(updatedUser!.mustChangePassword).toBe(false);
 
-      // Login again using the new password.
-      const newAgent = request.agent(app);
+      // Normal Requester application access is immediately allowed
+      // without requiring another login.
+      const allowedRes = await agent.get("/api/tickets");
 
-      const newLoginRes = await newAgent
+      expect(allowedRes.status).toBe(200);
+
+      // The old password no longer works.
+      const oldPasswordLogin = await request(app)
+        .post("/api/auth/login")
+        .send({
+          email,
+          password: initialPassword,
+        });
+
+      expect(oldPasswordLogin.status).toBe(401);
+
+      // The new password works for future logins.
+      const newPasswordLogin = await request(app)
         .post("/api/auth/login")
         .send({
           email,
           password: changedPassword,
         });
 
-      expect(newLoginRes.status).toBe(200);
-      expect(newLoginRes.body.user.mustChangePassword).toBe(false);
-
-      // Normal Requester application access is now allowed.
-      const allowedRes = await newAgent.get("/api/tickets");
-
-      expect(allowedRes.status).toBe(200);
+      expect(newPasswordLogin.status).toBe(200);
     } finally {
       await prisma.session.deleteMany({
         where: {

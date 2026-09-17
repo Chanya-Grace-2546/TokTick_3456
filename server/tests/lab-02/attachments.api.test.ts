@@ -167,6 +167,7 @@ describe("Attachments API", () => {
     it("uploads a valid PNG and returns its metadata", async () => {
       const res = await requesterAAgent
         .post(`/api/tickets/${ticketId}/attachments`)
+        .set("Origin", "http://localhost:5173")
         .attach("file", tinyPng, {
           filename: "screenshot.png",
           contentType: "image/png",
@@ -181,6 +182,7 @@ describe("Attachments API", () => {
     it("rejects a disallowed file type", async () => {
       const res = await requesterAAgent
         .post(`/api/tickets/${ticketId}/attachments`)
+        .set("Origin", "http://localhost:5173")
         .attach("file", Buffer.from("not an image"), {
           filename: "notes.txt",
           contentType: "text/plain",
@@ -194,6 +196,7 @@ describe("Attachments API", () => {
     it("rejects upload from a non-owning requester", async () => {
       const res = await requesterBAgent
         .post(`/api/tickets/${ticketId}/attachments`)
+        .set("Origin", "http://localhost:5173")
         .attach("file", tinyPng, {
           filename: "screenshot2.png",
           contentType: "image/png",
@@ -208,6 +211,7 @@ describe("Attachments API", () => {
     it("does not allow requesterId form-field tampering", async () => {
       const res = await requesterBAgent
         .post(`/api/tickets/${ticketId}/attachments`)
+        .set("Origin", "http://localhost:5173")
         .field("requesterId", String(requesterAId))
         .attach("file", tinyPng, {
           filename: "tampered.png",
@@ -224,6 +228,7 @@ describe("Attachments API", () => {
       for (let i = 0; i < 4; i++) {
         const res = await requesterAAgent
           .post(`/api/tickets/${ticketId}/attachments`)
+          .set("Origin", "http://localhost:5173")
           .attach("file", tinyPng, {
             filename: `extra-${i}.png`,
             contentType: "image/png",
@@ -234,6 +239,7 @@ describe("Attachments API", () => {
 
       const sixth = await requesterAAgent
         .post(`/api/tickets/${ticketId}/attachments`)
+        .set("Origin", "http://localhost:5173")
         .attach("file", tinyPng, {
           filename: "sixth.png",
           contentType: "image/png",
@@ -297,6 +303,7 @@ describe("Attachments API", () => {
     it("rejects removal without a reason", async () => {
       const res = await requesterAAgent
         .patch(`/api/attachments/${attachmentId}/remove`)
+        .set("Origin", "http://localhost:5173")
         .send({});
 
       expect(res.status).toBe(400);
@@ -306,6 +313,7 @@ describe("Attachments API", () => {
     it("soft-removes with a reason, then blocks further download (BR-27)", async () => {
       const removeRes = await requesterAAgent
         .patch(`/api/attachments/${attachmentId}/remove`)
+        .set("Origin", "http://localhost:5173")
         .send({
           reason: "Wrong screenshot attached",
         });
@@ -342,6 +350,7 @@ describe("Attachments API", () => {
     it("rejects removing an already-removed attachment", async () => {
       const res = await requesterAAgent
         .patch(`/api/attachments/${attachmentId}/remove`)
+        .set("Origin", "http://localhost:5173")
         .send({
           reason: "trying again",
         });

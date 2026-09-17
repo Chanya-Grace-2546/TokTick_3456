@@ -71,7 +71,8 @@ function user(
   return {
     id: 1,
     name: "Jennifer Anderson",
-    email: "jennifer@example.com",
+    email:
+      "jennifer.anderson@example.com",
     role: "REQUESTER",
     isActive: true,
     mustChangePassword: false,
@@ -102,7 +103,7 @@ describe("AuthGuard", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("allows an authenticated user with the required role", async () => {
+  it("allows an authenticated Requester on a Requester route", async () => {
     vi.spyOn(api, "getMe").mockResolvedValue(
       user()
     );
@@ -116,7 +117,7 @@ describe("AuthGuard", () => {
     });
   });
 
-  it("redirects a user with the wrong role", async () => {
+  it("rejects IT Staff from a Requester route", async () => {
     vi.spyOn(api, "getMe").mockResolvedValue(
       user({
         role: "IT_STAFF",
@@ -136,6 +137,77 @@ describe("AuthGuard", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("rejects an Administrator from a Requester route", async () => {
+    vi.spyOn(api, "getMe").mockResolvedValue(
+      user({
+        role: "ADMINISTRATOR",
+      })
+    );
+
+    renderGuard(["REQUESTER"]);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Home Screen")
+      ).toBeInTheDocument();
+    });
+
+    expect(
+      screen.queryByText("Protected Screen")
+    ).not.toBeInTheDocument();
+  });
+
+  it("allows IT Staff when IT_STAFF is an allowed role", async () => {
+    vi.spyOn(api, "getMe").mockResolvedValue(
+      user({
+        role: "IT_STAFF",
+      })
+    );
+
+    renderGuard(["IT_STAFF"]);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Protected Screen")
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("allows an Administrator when ADMINISTRATOR is an allowed role", async () => {
+    vi.spyOn(api, "getMe").mockResolvedValue(
+      user({
+        role: "ADMINISTRATOR",
+      })
+    );
+
+    renderGuard(["ADMINISTRATOR"]);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Protected Screen")
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("allows a route shared by IT Staff and Administrator", async () => {
+    vi.spyOn(api, "getMe").mockResolvedValue(
+      user({
+        role: "ADMINISTRATOR",
+      })
+    );
+
+    renderGuard([
+      "IT_STAFF",
+      "ADMINISTRATOR",
+    ]);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Protected Screen")
+      ).toBeInTheDocument();
+    });
+  });
+
   it("forces initial password change before protected business routes", async () => {
     vi.spyOn(api, "getMe").mockResolvedValue(
       user({
@@ -152,6 +224,33 @@ describe("AuthGuard", () => {
         )
       ).toBeInTheDocument();
     });
+
+    expect(
+      screen.queryByText("Protected Screen")
+    ).not.toBeInTheDocument();
+  });
+
+  it("forces initial password change even when the user has the required role", async () => {
+    vi.spyOn(api, "getMe").mockResolvedValue(
+      user({
+        role: "IT_STAFF",
+        mustChangePassword: true,
+      })
+    );
+
+    renderGuard(["IT_STAFF"]);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          "Change Password Screen"
+        )
+      ).toBeInTheDocument();
+    });
+
+    expect(
+      screen.queryByText("Protected Screen")
+    ).not.toBeInTheDocument();
   });
 
   it("allows access to the password-change route while password change is required", async () => {
