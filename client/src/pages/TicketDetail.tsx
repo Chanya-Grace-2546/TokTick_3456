@@ -1,331 +1,1144 @@
-import { useEffect, useState, useRef } from "react";
-import { useParams, Link } from "react-router-dom";
 import {
-  fetchTicketDetail,
-  uploadAttachment,
-  downloadAttachment,
-  removeAttachment,
+  ChangeEvent,
+  FormEvent,
+  useCallback,
+  useEffect,
+  useState,
+} from "react";
+import {
+  Link,
+  useParams,
+} from "react-router-dom";
+import {
+  AttachmentMeta,
+  AttachmentUploadError,
+  PublicComment,
   TicketDetailData,
   TicketNotFoundError,
-  AttachmentUploadError,
-  AttachmentMeta,
+  createPublicComment,
+  downloadAttachment,
+  fetchPublicComments,
+  fetchTicketDetail,
+  markProblemAppearsResolved,
+  removeAttachment,
+  uploadAttachment,
 } from "../api.js";
-import { zenGreen } from "../theme.js";
 
-type ScreenState = "loading" | "not-found" | "error" | "ready";
+const MAX_ACTIVE_ATTACHMENTS = 5;
+const MAX_COMMENT_LENGTH = 2000;
 
-const cardStyle: React.CSSProperties = {
-  backgroundColor: "white",
-  border: "1px solid #E0E5E2",
-  borderRadius: 8,
-  boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-};
-
-const PRIORITY_BADGE: Record<string, string> = {
-  LOW: "#0B7A46",
-  MEDIUM: "#B8860B",
-  HIGH: "#B3261E",
-};
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+function formatLabel(value: string) {
+  return value
+    .toLowerCase()
+    .split("_")
+    .map(
+      (word) =>
+        word.charAt(0).toUpperCase() +
+        word.slice(1)
+    )
+    .join(" ");
 }
 
-// Lab 2 Issue 6 — Requester Ticket Detail + Attachments
-// Lab 3 — Requester identity and ownership come from the authenticated Session.
+function formatDate(value: string) {
+  return new Date(value).toLocaleDateString();
+}
+
+function formatDateTime(value: string) {
+  return new Date(value).toLocaleString();
+}
+
+function priorityColor(priority: string) {
+  switch (priority) {
+    case "HIGH":
+      return "#b42318";
+    case "MEDIUM":
+      return "#b8860b";
+    case "LOW":
+      return "#526d5c";
+    default:
+      return "#526d5c";
+  }
+}
+
+function statusColor(status: string) {
+  switch (status) {
+    case "RESOLVED":
+    case "CLOSED":
+      return "#526d5c";
+
+    case "CANCELLED":
+      return "#6c757d";
+
+    default:
+      return "#0b7a46";
+  }
+}
+
 export default function TicketDetail() {
-  const { id } = useParams<{ id: string }>();
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { id } = useParams();
 
-  const [state, setState] = useState<ScreenState>("loading");
-  const [ticket, setTicket] = useState<TicketDetailData | null>(null);
-  const [uploadError, setUploadError] = useState("");
-  const [uploading, setUploading] = useState(false);
-  const [removingId, setRemovingId] = useState<number | null>(null);
+  const ticketId = Number(id);
 
-  function load() {
-    if (!id) return;
+  const [
+    ticket,
+    setTicket,
+  ] =
+    useState<TicketDetailData | null>(
+      null
+    );
 
-    setState("loading");
+  const [
+    comments,
+    setComments,
+  ] = useState<
+    PublicComment[]
+  >([]);
 
-    fetchTicketDetail(Number(id))
-      .then((data) => {
+  const [
+    loading,
+    setLoading,
+  ] = useState(true);
+
+  const [
+    loadError,
+    setLoadError,
+  ] = useState("");
+
+  const [
+    commentLoading,
+    setCommentLoading,
+  ] = useState(true);
+
+  const [
+    commentLoadError,
+    setCommentLoadError,
+  ] = useState("");
+
+  const [
+    commentText,
+    setCommentText,
+  ] = useState("");
+
+  const [
+    commentError,
+    setCommentError,
+  ] = useState("");
+
+  const [
+    postingComment,
+    setPostingComment,
+  ] = useState(false);
+
+  const [
+    resolving,
+    setResolving,
+  ] = useState(false);
+
+  const [
+    resolutionError,
+    setResolutionError,
+  ] = useState("");
+
+  const [
+    uploading,
+    setUploading,
+  ] = useState(false);
+
+  const [
+    attachmentError,
+    setAttachmentError,
+  ] = useState("");
+
+  const loadTicket =
+    useCallback(async () => {
+      if (
+        !Number.isInteger(
+          ticketId
+        ) ||
+        ticketId <= 0
+      ) {
+        setLoadError(
+          "Ticket not found."
+        );
+        setLoading(false);
+        return;
+      }
+
+      try {
+        setLoadError("");
+
+        const data =
+          await fetchTicketDetail(
+            ticketId
+          );
+
         setTicket(data);
-        setState("ready");
-      })
-      .catch((err) => {
-        setState(err instanceof TicketNotFoundError ? "not-found" : "error");
-      });
+      } catch (error) {
+  if (
+    error instanceof
+    TicketNotFoundError
+  ) {
+    setLoadError(
+      "This ticket doesn't exist or isn't available."
+    );
+  } else {
+    setLoadError(
+      "Could not load this ticket. Please try again."
+    );
+  }
+} finally {
+        setLoading(false);
+      }
+    }, [ticketId]);
+
+  const loadComments =
+    useCallback(async () => {
+      if (
+        !Number.isInteger(
+          ticketId
+        ) ||
+        ticketId <= 0
+      ) {
+        setCommentLoading(
+          false
+        );
+        return;
+      }
+
+      try {
+        setCommentLoadError(
+          ""
+        );
+
+        const result =
+          await fetchPublicComments(
+            ticketId
+          );
+
+        setComments(
+          result.items
+        );
+      } catch {
+        setCommentLoadError(
+          "Could not load Public Comments."
+        );
+      } finally {
+        setCommentLoading(
+          false
+        );
+      }
+    }, [ticketId]);
+
+  useEffect(() => {
+    void loadTicket();
+    void loadComments();
+  }, [
+    loadTicket,
+    loadComments,
+  ]);
+
+  async function handleCommentSubmit(
+    event: FormEvent
+  ) {
+    event.preventDefault();
+
+    const trimmed =
+      commentText.trim();
+
+    if (!trimmed) {
+      setCommentError(
+        "Comment is required."
+      );
+      return;
+    }
+
+    if (
+      trimmed.length >
+      MAX_COMMENT_LENGTH
+    ) {
+      setCommentError(
+        "Comment must be 2000 characters or fewer."
+      );
+      return;
+    }
+
+    setCommentError("");
+    setPostingComment(true);
+
+    try {
+      const comment =
+        await createPublicComment(
+          ticketId,
+          trimmed
+        );
+
+      setComments(
+        (current) => [
+          ...current,
+          comment,
+        ]
+      );
+
+      setCommentText("");
+
+      setTicket(
+        (current) =>
+          current
+            ? {
+                ...current,
+                requesterResolvedAt:
+                  null,
+                requesterResolvedById:
+                  null,
+              }
+            : current
+      );
+    } catch {
+      setCommentError(
+        "Could not post comment. Please try again."
+      );
+    } finally {
+      setPostingComment(
+        false
+      );
+    }
   }
 
-  useEffect(load, [id]);
+  async function handleProblemAppearsResolved() {
+    setResolutionError(
+      ""
+    );
+    setResolving(true);
 
-  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
+    try {
+      const result =
+        await markProblemAppearsResolved(
+          ticketId
+        );
 
-    if (!file || !ticket) return;
+      setTicket(
+        (current) =>
+          current
+            ? {
+                ...current,
+                requesterResolvedAt:
+                  result.requesterResolvedAt,
+                requesterResolvedById:
+                  current.requesterId,
+                currentStatus:
+                  result.status,
+              }
+            : current
+      );
+    } catch {
+      setResolutionError(
+        "Could not save the resolution indication. Please try again."
+      );
+    } finally {
+      setResolving(false);
+    }
+  }
 
-    setUploadError("");
+  async function handleFileChange(
+    event: ChangeEvent<HTMLInputElement>
+  ) {
+    const file =
+      event.target.files?.[0];
+
+    event.target.value = "";
+
+    if (!file || !ticket) {
+      return;
+    }
+
+    setAttachmentError(
+      ""
+    );
+
+    const activeCount =
+      ticket.attachments.filter(
+        (attachment) =>
+          !attachment.isRemoved
+      ).length;
+
+    if (
+      activeCount >=
+      MAX_ACTIVE_ATTACHMENTS
+    ) {
+      setAttachmentError(
+        "Maximum of 5 active attachments reached."
+      );
+      return;
+    }
+
     setUploading(true);
 
     try {
-      await uploadAttachment(ticket.id, file);
-      load();
-    } catch (err) {
-      if (err instanceof AttachmentUploadError) {
-        const messages: Record<string, string> = {
-          INVALID_FILE_TYPE: "Only JPG, PNG, WEBP, or PDF files are allowed.",
-          FILE_TOO_LARGE: "File is too large — 5MB maximum.",
-          MAX_ATTACHMENTS_REACHED: "This ticket already has 5 active attachments.",
-        };
+      const attachment =
+        await uploadAttachment(
+          ticket.id,
+          file
+        );
 
-        setUploadError(messages[err.code] ?? "Upload failed. Please try again.");
+      setTicket(
+        (current) =>
+          current
+            ? {
+                ...current,
+                attachments: [
+                  ...current.attachments,
+                  attachment,
+                ],
+              }
+            : current
+      );
+    } catch (error) {
+      if (
+        error instanceof
+        AttachmentUploadError
+      ) {
+        switch (error.code) {
+          case "INVALID_FILE_TYPE":
+            setAttachmentError(
+              "Invalid attachment type. Use JPG, JPEG, PNG, WEBP, or PDF."
+            );
+            break;
+
+          case "FILE_TOO_LARGE":
+            setAttachmentError(
+              "Attachment is too large."
+            );
+            break;
+
+          case "MAX_ATTACHMENTS_REACHED":
+            setAttachmentError(
+              "Maximum of 5 active attachments reached."
+            );
+            break;
+
+          default:
+            setAttachmentError(
+              "Could not upload attachment. Please try again."
+            );
+        }
       } else {
-        setUploadError("Upload failed. Please try again.");
+        setAttachmentError(
+          "Could not upload attachment. Please try again."
+        );
       }
     } finally {
       setUploading(false);
-
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
     }
   }
 
-  async function handleDownload(attachment: AttachmentMeta) {
-    setUploadError("");
+  async function handleDownloadAttachment(
+    attachment: AttachmentMeta
+  ) {
+    setAttachmentError("");
 
     try {
-      const blob = await downloadAttachment(attachment.id);
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
+      const blob =
+        await downloadAttachment(
+          attachment.id
+        );
+
+      const url =
+        URL.createObjectURL(blob);
+
+      const link =
+        document.createElement(
+          "a"
+        );
 
       link.href = url;
-      link.download = attachment.fileName;
+      link.download =
+        attachment.fileName;
 
-      document.body.appendChild(link);
+      document.body.appendChild(
+        link
+      );
+
       link.click();
       link.remove();
 
-      URL.revokeObjectURL(url);
+      URL.revokeObjectURL(
+        url
+      );
     } catch {
-      setUploadError("Couldn't download that attachment. Please try again.");
+      setAttachmentError(
+        "Could not download attachment. Please try again."
+      );
     }
   }
 
-  async function handleRemove(attachment: AttachmentMeta) {
-    const reason = window.prompt(`Reason for removing "${attachment.fileName}"?`);
+  async function handleRemoveAttachment(
+    attachment: AttachmentMeta
+  ) {
+    const reason =
+      window.prompt(
+        "Reason for removing this attachment:"
+      );
 
-    if (!reason || !reason.trim()) return;
+    if (
+      reason === null
+    ) {
+      return;
+    }
 
-    setRemovingId(attachment.id);
+    if (!reason.trim()) {
+      setAttachmentError(
+        "Removal reason is required."
+      );
+      return;
+    }
+
+    setAttachmentError(
+      ""
+    );
 
     try {
-      await removeAttachment(attachment.id, reason.trim());
-      load();
+      const result =
+        await removeAttachment(
+          attachment.id,
+          reason.trim()
+        );
+
+      setTicket(
+        (current) =>
+          current
+            ? {
+                ...current,
+                attachments:
+                  current.attachments.map(
+                    (item) =>
+                      item.id ===
+                      attachment.id
+                        ? {
+                            ...item,
+                            isRemoved:
+                              true,
+                            removedAt:
+                              result.removedAt,
+                            removedReason:
+                              result.removedReason,
+                          }
+                        : item
+                  ),
+              }
+            : current
+      );
     } catch {
-      setUploadError("Couldn't remove that attachment. Please try again.");
-    } finally {
-      setRemovingId(null);
+      setAttachmentError(
+        "Could not remove attachment. Please try again."
+      );
     }
   }
 
-  if (state === "loading") {
+  if (loading) {
     return (
-      <div className="container py-5" style={{ maxWidth: 840 }}>
-        <p role="status">Loading ticket…</p>
+      <div
+        className="container py-5 text-center"
+        role="status"
+      >
+        Loading ticket...
       </div>
     );
   }
 
-  if (state === "not-found") {
+  if (
+    loadError ||
+    !ticket
+  ) {
     return (
-      <div className="container py-5" style={{ maxWidth: 840 }}>
-        <p role="alert">This ticket doesn't exist or isn't available to you.</p>
-        <Link to="/tickets">Back to My Tickets</Link>
+      <div
+        className="container py-5"
+        style={{
+          maxWidth: 840,
+        }}
+      >
+        <Link
+          to="/tickets"
+          className="d-inline-block mb-3 small"
+        >
+          ← Back to My Tickets
+        </Link>
+
+        <div
+          className="alert alert-danger"
+          role="alert"
+        >
+          {loadError ||
+            "Ticket not found."}
+        </div>
       </div>
     );
   }
 
-  if (state === "error" || !ticket) {
-    return (
-      <div className="container py-5" style={{ maxWidth: 840 }}>
-        <p role="alert" className="text-danger">
-          Couldn't load this ticket. Please try again.
-        </p>
-      </div>
-    );
-  }
-
-  const activeAttachments = ticket.attachments.filter((a) => !a.isRemoved);
+  const activeAttachmentCount =
+    ticket.attachments.filter(
+      (attachment) =>
+        !attachment.isRemoved
+    ).length;
 
   return (
-    <div className="container py-5" style={{ maxWidth: 840 }}>
-      <Link to="/tickets" className="d-inline-block mb-3 small">
+    <div
+      className="container py-5"
+      style={{
+        maxWidth: 840,
+      }}
+    >
+      <Link
+        to="/tickets"
+        className="d-inline-block mb-3 small"
+      >
         ← Back to My Tickets
       </Link>
 
-      <div className="p-4 mb-4" style={cardStyle}>
+      <div
+        className="p-4 mb-4"
+        style={{
+          backgroundColor:
+            "white",
+          border:
+            "1px solid #e0e5e2",
+          borderRadius: 8,
+          boxShadow:
+            "0 1px 3px rgba(0,0,0,0.05)",
+        }}
+      >
         <div className="row g-3 mb-3">
           <div className="col-12 col-md-6 col-lg-3">
-            <div className="text-muted small">Ticket No.</div>
-            <div className="fw-bold">{ticket.ticketNumber}</div>
+            <div className="text-muted small">
+              Ticket No.
+            </div>
+
+            <div className="fw-bold">
+              {
+                ticket.ticketNumber
+              }
+            </div>
           </div>
 
           <div className="col-12 col-md-6 col-lg-3">
-            <div className="text-muted small">Ticket Date</div>
-            <div>{new Date(ticket.createdAt).toLocaleDateString()}</div>
+            <div className="text-muted small">
+              Ticket Date
+            </div>
+
+            <div>
+              {formatDate(
+                ticket.createdAt
+              )}
+            </div>
           </div>
 
           <div className="col-12 col-md-6 col-lg-3">
-            <div className="text-muted small">Category</div>
-            <div>{ticket.category}</div>
+            <div className="text-muted small">
+              Category
+            </div>
+
+            <div>
+              {
+                ticket.category
+              }
+            </div>
           </div>
 
           <div className="col-12 col-md-6 col-lg-3">
-            <div className="text-muted small">Related System</div>
-            <div>{ticket.relatedSystem}</div>
+            <div className="text-muted small">
+              Related System
+            </div>
+
+            <div>
+              {
+                ticket.relatedSystem
+              }
+            </div>
           </div>
         </div>
 
         <div className="row g-3 mb-3">
           <div className="col-12 col-md-6 col-lg-3">
-            <div className="text-muted small">Requested Priority</div>
+            <div className="text-muted small">
+              Requested Priority
+            </div>
+
             <span
               className="badge"
-              style={{ backgroundColor: PRIORITY_BADGE[ticket.requestedPriority] }}
+              style={{
+                backgroundColor:
+                  priorityColor(
+                    ticket.requestedPriority
+                  ),
+              }}
             >
-              {ticket.requestedPriority}
+              {
+                ticket.requestedPriority
+              }
             </span>
           </div>
 
           <div className="col-12 col-md-6 col-lg-3">
-            <div className="text-muted small">IT Priority</div>
-            <div>{ticket.itPriority ?? "—"}</div>
+            <div className="text-muted small">
+              IT Priority
+            </div>
+
+            <div>
+              {
+                ticket.itPriority
+              }
+            </div>
           </div>
 
           <div className="col-12 col-md-6 col-lg-3">
-            <div className="text-muted small">Current Status</div>
+            <div className="text-muted small">
+              Current Status
+            </div>
+
             <span
               className="badge"
-              style={{ backgroundColor: zenGreen.secondary }}
+              style={{
+                backgroundColor:
+                  statusColor(
+                    ticket.currentStatus
+                  ),
+              }}
             >
-              {ticket.currentStatus}
+              {formatLabel(
+                ticket.currentStatus
+              )}
             </span>
           </div>
         </div>
 
         <div className="mb-3">
-          <div className="text-muted small">Summary</div>
-          <div>{ticket.summary}</div>
+          <div className="text-muted small">
+            Summary
+          </div>
+
+          <div>
+            {ticket.summary}
+          </div>
         </div>
 
         <div>
-          <div className="text-muted small">Description</div>
-          <div style={{ whiteSpace: "pre-wrap" }}>{ticket.description}</div>
+          <div className="text-muted small">
+            Description
+          </div>
+
+          <div
+            style={{
+              whiteSpace:
+                "pre-wrap",
+            }}
+          >
+            {
+              ticket.description
+            }
+          </div>
         </div>
       </div>
 
-      <div className="p-4" style={cardStyle}>
+      <div
+        className="p-4 mb-4"
+        style={{
+          backgroundColor:
+            "white",
+          border:
+            "1px solid #e0e5e2",
+          borderRadius: 8,
+          boxShadow:
+            "0 1px 3px rgba(0,0,0,0.05)",
+        }}
+      >
+        <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-3">
+          <div>
+            <h2
+              className="h5 mb-1"
+              style={{
+                color:
+                  "#1f2e27",
+              }}
+            >
+              Problem Status
+            </h2>
+
+            <div className="text-muted small">
+              This indication does
+              not formally resolve
+              or close the ticket.
+            </div>
+          </div>
+
+          {!ticket.requesterResolvedAt && (
+            <button
+              type="button"
+              className="btn btn-outline-success"
+              disabled={
+                resolving
+              }
+              onClick={() =>
+                void handleProblemAppearsResolved()
+              }
+            >
+              {resolving
+                ? "Saving..."
+                : "Problem Appears Resolved"}
+            </button>
+          )}
+        </div>
+
+        {ticket.requesterResolvedAt && (
+          <div
+            className="alert alert-success mb-0"
+            role="status"
+          >
+            You indicated that this
+            problem appears resolved.
+            The IT team still controls
+            the formal Ticket status.
+          </div>
+        )}
+
+        {resolutionError && (
+          <div
+            className="alert alert-danger mt-3 mb-0"
+            role="alert"
+          >
+            {resolutionError}
+          </div>
+        )}
+      </div>
+
+      <div
+        className="p-4 mb-4"
+        style={{
+          backgroundColor:
+            "white",
+          border:
+            "1px solid #e0e5e2",
+          borderRadius: 8,
+          boxShadow:
+            "0 1px 3px rgba(0,0,0,0.05)",
+        }}
+      >
+        <h2
+          className="h5 mb-3"
+          style={{
+            color:
+              "#1f2e27",
+          }}
+        >
+          Public Comments
+        </h2>
+
+        {commentLoading ? (
+          <p className="text-muted">
+            Loading comments...
+          </p>
+        ) : commentLoadError ? (
+          <div className="text-danger mb-3">
+            {commentLoadError}
+          </div>
+        ) : comments.length ===
+          0 ? (
+          <p className="text-muted">
+            No Public Comments
+            yet.
+          </p>
+        ) : (
+          <div className="mb-4">
+            {comments.map(
+              (comment) => (
+                <div
+                  key={
+                    comment.id
+                  }
+                  className="border rounded p-3 mb-2"
+                >
+                  <div className="d-flex flex-wrap gap-2 align-items-center mb-2">
+                    <strong>
+                      {
+                        comment
+                          .author
+                          .name
+                      }
+                    </strong>
+
+                    <span className="badge text-bg-light">
+                      {formatLabel(
+                        comment
+                          .author
+                          .role
+                      )}
+                    </span>
+
+                    <span className="text-muted small">
+                      {formatDateTime(
+                        comment.createdAt
+                      )}
+                    </span>
+                  </div>
+
+                  <div
+                    style={{
+                      whiteSpace:
+                        "pre-wrap",
+                    }}
+                  >
+                    {
+                      comment.content
+                    }
+                  </div>
+                </div>
+              )
+            )}
+          </div>
+        )}
+
+        <form
+          onSubmit={
+            handleCommentSubmit
+          }
+        >
+          <div className="mb-2">
+            <label
+              htmlFor="public-comment"
+              className="form-label"
+            >
+              Public Comment
+            </label>
+
+            <textarea
+              id="public-comment"
+              className="form-control"
+              rows={4}
+              maxLength={
+                MAX_COMMENT_LENGTH +
+                1
+              }
+              value={
+                commentText
+              }
+              disabled={
+                postingComment
+              }
+              onChange={(
+                event
+              ) => {
+                setCommentText(
+                  event.target
+                    .value
+                );
+
+                if (
+                  commentError
+                ) {
+                  setCommentError(
+                    ""
+                  );
+                }
+              }}
+            />
+          </div>
+
+          <div className="d-flex justify-content-between align-items-center gap-3">
+            <small className="text-muted">
+              {
+                commentText.length
+              }
+              /
+              {
+                MAX_COMMENT_LENGTH
+              }
+            </small>
+
+            <button
+              type="submit"
+              className="btn btn-success"
+              disabled={
+                postingComment
+              }
+            >
+              {postingComment
+                ? "Posting..."
+                : "Post Comment"}
+            </button>
+          </div>
+
+          {commentError && (
+            <div
+              className="alert alert-danger mt-3 mb-0"
+              role="alert"
+            >
+              {commentError}
+            </div>
+          )}
+        </form>
+      </div>
+
+      <div
+        className="p-4"
+        style={{
+          backgroundColor:
+            "white",
+          border:
+            "1px solid #e0e5e2",
+          borderRadius: 8,
+          boxShadow:
+            "0 1px 3px rgba(0,0,0,0.05)",
+        }}
+      >
         <div className="d-flex justify-content-between align-items-center mb-3">
-          <h2 className="h5 mb-0" style={{ color: zenGreen.text }}>
-            Attachments ({activeAttachments.length}/5)
+          <h2
+            className="h5 mb-0"
+            style={{
+              color:
+                "#1f2e27",
+            }}
+          >
+            Attachments (
+            {
+              activeAttachmentCount
+            }
+            /
+            {
+              MAX_ACTIVE_ATTACHMENTS
+            }
+            )
           </h2>
 
           <div>
             <input
-              ref={fileInputRef}
-              type="file"
               id="attachment-file"
+              type="file"
               className="d-none"
               accept=".jpg,.jpeg,.png,.webp,.pdf"
-              onChange={handleFileChange}
-              disabled={uploading || activeAttachments.length >= 5}
+              disabled={
+                uploading ||
+                activeAttachmentCount >=
+                  MAX_ACTIVE_ATTACHMENTS
+              }
+              onChange={(
+                event
+              ) =>
+                void handleFileChange(
+                  event
+                )
+              }
             />
 
             <label
               htmlFor="attachment-file"
               className="btn btn-sm"
               style={{
-                backgroundColor: zenGreen.primary,
+                backgroundColor:
+                  "#006b3c",
                 color: "white",
-                opacity: uploading || activeAttachments.length >= 5 ? 0.6 : 1,
+                opacity:
+                  uploading ||
+                  activeAttachmentCount >=
+                    MAX_ACTIVE_ATTACHMENTS
+                    ? 0.65
+                    : 1,
                 cursor:
-                  uploading || activeAttachments.length >= 5
+                  uploading ||
+                  activeAttachmentCount >=
+                    MAX_ACTIVE_ATTACHMENTS
                     ? "not-allowed"
                     : "pointer",
               }}
             >
-              {uploading ? "Uploading…" : "+ Add Attachment"}
+              {uploading
+                ? "Uploading..."
+                : "+ Add Attachment"}
             </label>
           </div>
         </div>
 
-        {uploadError && (
-          <p role="alert" className="text-danger small">
-            {uploadError}
-          </p>
+        {attachmentError && (
+          <div
+            className="alert alert-danger"
+            role="alert"
+          >
+            {attachmentError}
+          </div>
         )}
 
-        {ticket.attachments.length === 0 ? (
-          <p className="text-muted">No attachments yet.</p>
+        {ticket.attachments
+          .length === 0 ? (
+          <p className="text-muted">
+            No attachments yet.
+          </p>
         ) : (
-          <ul className="list-group">
-            {ticket.attachments.map((a) => (
-              <li
-                key={a.id}
-                className="list-group-item d-flex justify-content-between align-items-center"
-                style={a.isRemoved ? { opacity: 0.6 } : undefined}
-              >
-                <div>
-                  <div
-                    style={
-                      a.isRemoved
-                        ? { textDecoration: "line-through" }
-                        : undefined
-                    }
-                  >
-                    {a.fileName}{" "}
-                    <span className="text-muted small">
-                      ({formatBytes(a.sizeBytes)})
-                    </span>
-                  </div>
+          <div className="d-flex flex-column gap-2">
+            {ticket.attachments.map(
+              (attachment) => (
+                <div
+                  key={
+                    attachment.id
+                  }
+                  className="border rounded p-3"
+                >
+                  <div className="d-flex flex-column flex-md-row justify-content-between gap-3">
+                    <div>
+                      <div className="fw-semibold">
+                        {
+                          attachment.fileName
+                        }
+                      </div>
 
-                  {a.isRemoved && (
-                    <div className="text-muted small">
-                      Removed {new Date(a.removedAt!).toLocaleDateString()} —{" "}
-                      {a.removedReason}
+                      <div className="text-muted small">
+                        {Math.ceil(
+                          attachment.sizeBytes /
+                            1024
+                        )}{" "}
+                        KB
+                      </div>
+
+                      {attachment.isRemoved && (
+                        <div className="text-danger small mt-1">
+                          Removed
+                          {attachment.removedReason
+                            ? ` — ${attachment.removedReason}`
+                            : ""}
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
 
-                <div className="d-flex gap-2">
-                  {!a.isRemoved && (
-                    <>
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-outline-secondary"
-                        onClick={() => handleDownload(a)}
-                      >
-                        Download
-                      </button>
+                    <div className="d-flex gap-2 align-items-start">
+                      {!attachment.isRemoved && (
+                        <>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline-success"
+                            onClick={() =>
+                              void handleDownloadAttachment(
+                                attachment
+                              )
+                            }
+                          >
+                            Download
+                          </button>
 
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-outline-danger"
-                        disabled={removingId === a.id}
-                        onClick={() => handleRemove(a)}
-                      >
-                        {removingId === a.id ? "Removing…" : "Remove"}
-                      </button>
-                    </>
-                  )}
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline-danger"
+                            onClick={() =>
+                              void handleRemoveAttachment(
+                                attachment
+                              )
+                            }
+                          >
+                            Remove
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </li>
-            ))}
-          </ul>
+              )
+            )}
+          </div>
         )}
       </div>
     </div>

@@ -225,10 +225,10 @@ describe("TicketDetail", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByRole("alert")
-      ).toHaveTextContent(
-        /already has 5 active attachments/i
-      );
+  screen.getByRole("alert")
+).toHaveTextContent(
+  /maximum of 5 active attachments reached/i
+);
     });
   });
 

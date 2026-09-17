@@ -57,7 +57,9 @@ model User {
   ticketsRequested Ticket[] @relation("TicketRequester")
 
   // Tickets assigned to this User as operational owner.
-  ticketsOwned Ticket[] @relation("TicketOwner")
+  ticketsOwned             Ticket[] @relation("TicketOwner")
+  // Requester apparent-resolution indications made by this User.
+  requesterResolvedTickets Ticket[] @relation("TicketRequesterResolvedBy")
 
   publicComments PublicComment[]
   internalNotes  InternalNote[]
@@ -133,11 +135,14 @@ model Ticket {
   status TicketStatus @default(NEW)
 
   // Requester indication only; this does not formally resolve the Ticket.
-  problemAppearsResolved   Boolean   @default(false)
-  problemAppearsResolvedAt DateTime?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  requesterResolvedAt DateTime?
+
+  requesterResolvedById Int?
+
+  requesterResolvedBy User?    @relation("TicketRequesterResolvedBy", fields: [requesterResolvedById], references: [id])
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   // Preserve Lab 2 attachments.
   attachments Attachment[]
@@ -152,6 +157,7 @@ model Ticket {
   @@index([categoryId])
   @@index([requestedPriority])
   @@index([itPriority])
+  @@index([requesterResolvedById])
 }
 
 // ---------------------------------------------------------------------------

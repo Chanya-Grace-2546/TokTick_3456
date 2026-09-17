@@ -41,15 +41,6 @@ export async function checkSystem(): Promise<SystemStatus> {
   };
 }
 
-// Lab 2 Issue 2 — Development Requester Context
-// Lab 3 keeps this type/API only as legacy development/reference-data support.
-// Requester identity for Ticket operations now comes from authentication.
-export interface Requester {
-  id: number;
-  name: string;
-  email: string;
-}
-
 export async function fetchCategories(): Promise<Category[]> {
   const res = await fetch(
     `${API_URL}/api/categories`
@@ -57,20 +48,6 @@ export async function fetchCategories(): Promise<Category[]> {
 
   if (!res.ok) {
     throw new Error("Failed to load categories");
-  }
-
-  return res.json();
-}
-
-export async function fetchActiveRequesters(): Promise<Requester[]> {
-  const res = await fetch(
-    `${API_URL}/api/requesters`
-  );
-
-  if (!res.ok) {
-    throw new Error(
-      "Failed to load development requesters"
-    );
   }
 
   return res.json();
@@ -284,6 +261,12 @@ export interface TicketDetailData {
   requestedPriority: Priority;
   itPriority: Priority | null;
   currentStatus: string;
+
+  // Lab 3 Issue 4 — Requester apparent-resolution indication.
+  // This does not formally change the Ticket status.
+requesterResolvedAt?: string | null;
+requesterResolvedById?: number | null;
+
   createdAt: string;
   updatedAt: string;
   attachments: AttachmentMeta[];
@@ -542,4 +525,138 @@ export async function changePassword(
         "CHANGE_PASSWORD_FAILED"
     );
   }
+}
+
+// Lab 3 Issue 4 — Public Comments
+
+export interface PublicCommentAuthor {
+  id: number;
+  name: string;
+  role: UserRole;
+}
+
+export interface PublicComment {
+  id: number;
+  content: string;
+  author: PublicCommentAuthor;
+  createdAt: string;
+}
+
+export interface PublicCommentsResponse {
+  items: PublicComment[];
+}
+
+export async function fetchPublicComments(
+  ticketId: number
+): Promise<PublicCommentsResponse> {
+  const res = await fetch(
+    `${API_URL}/api/tickets/${ticketId}/comments`,
+    {
+      credentials: "include",
+    }
+  );
+
+  if (res.status === 404) {
+    throw new TicketNotFoundError(
+      "TICKET_NOT_FOUND"
+    );
+  }
+
+  if (!res.ok) {
+    const body = await res
+      .json()
+      .catch(() => ({
+        error: "LOAD_COMMENTS_FAILED",
+      }));
+
+    throw new Error(
+      body.error ??
+        "Failed to load Public Comments"
+    );
+  }
+
+  return res.json();
+}
+
+export async function createPublicComment(
+  ticketId: number,
+  content: string
+): Promise<PublicComment> {
+  const res = await fetch(
+    `${API_URL}/api/tickets/${ticketId}/comments`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        content,
+      }),
+    }
+  );
+
+  if (res.status === 404) {
+    throw new TicketNotFoundError(
+      "TICKET_NOT_FOUND"
+    );
+  }
+
+  if (!res.ok) {
+    const body = await res
+      .json()
+      .catch(() => ({
+        error: "CREATE_COMMENT_FAILED",
+      }));
+
+    throw new Error(
+      body.error ??
+        "Failed to create Public Comment"
+    );
+  }
+
+  return res.json();
+}
+
+// Lab 3 Issue 4 — Requester apparent-resolution indication.
+// This action records the Requester's indication only.
+// It does not formally resolve or close the Ticket.
+
+export interface ProblemAppearsResolvedResponse {
+  requesterResolvedAt: string;
+  status: string;
+}
+
+export async function markProblemAppearsResolved(
+  ticketId: number
+): Promise<ProblemAppearsResolvedResponse> {
+  const res = await fetch(
+    `${API_URL}/api/tickets/${ticketId}/problem-appears-resolved`,
+    {
+      method: "POST",
+      credentials: "include",
+    }
+  );
+
+  if (res.status === 404) {
+    throw new TicketNotFoundError(
+      "TICKET_NOT_FOUND"
+    );
+  }
+
+  if (!res.ok) {
+    const body = await res
+      .json()
+      .catch(() => ({
+        error:
+          "PROBLEM_APPEARS_RESOLVED_FAILED",
+      }));
+
+    throw new Error(
+      body.error ??
+        "Failed to save resolution indication"
+    );
+  }
+
+  return res.json();
 }
