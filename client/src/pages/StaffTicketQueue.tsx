@@ -220,16 +220,31 @@ export default function StaffTicketQueue() {
           <div className="d-none d-lg-block" style={panelStyle}>
             <table className="table align-middle mb-0" aria-label="Ticket Queue" style={{ tableLayout: "fixed", width: "100%" }}>
               <thead><tr>
-                <th scope="col" style={{ width: "24%" }}>Ticket Number</th>
-                <th scope="col" style={{ width: "14%" }}>Updated</th>
-                <th scope="col" style={{ width: "21%" }}>Summary</th>
+                <th scope="col" style={{ width: "14%" }}>Ticket Number</th>
+                <th scope="col" style={{ width: "18%" }}>Requester</th>
+                <th scope="col" style={{ width: "12%" }}>Updated</th>
+                <th scope="col" style={{ width: "18%" }}>Summary</th>
                 <th scope="col" style={{ width: "10%" }}>Requested Priority</th>
                 <th scope="col" style={{ width: "8%" }}>IT Priority</th>
-                <th scope="col" style={{ width: "13%" }}>Status</th>
-                <th scope="col" style={{ width: "10%" }}>Owner</th>
+                <th scope="col" style={{ width: "12%" }}>Status</th>
+                <th scope="col" style={{ width: "8%" }}>Owner</th>
               </tr></thead>
-              <tbody>{data.items.map(ticket => <tr key={ticket.id}>
-                <td><span className="fw-semibold">{ticket.ticketNumber}</span><div className="small text-muted">{ticket.requester.name}</div><div className="small text-muted"><RequesterEmail email={ticket.requester.email} /></div></td>
+              <tbody>{data.items.map(ticket => <tr
+                key={ticket.id}
+                role="link"
+                tabIndex={0}
+                aria-label={`Open ticket ${ticket.ticketNumber}`}
+                style={{ cursor: "pointer" }}
+                onClick={() => navigate(`/staff/tickets/${ticket.id}`)}
+                onKeyDown={event => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    navigate(`/staff/tickets/${ticket.id}`);
+                  }
+                }}
+              >
+                <td className="fw-semibold">{ticket.ticketNumber}</td>
+                <td><div>{ticket.requester.name}</div><div className="small text-muted"><RequesterEmail email={ticket.requester.email} /></div></td>
                 <td className="small"><Updated date={ticket.updatedAt} /></td>
                 <td>{ticket.summary}<div className="small text-muted">{ticket.category.name}</div></td>
                 <td><PriorityBadge priority={ticket.requestedPriority} /></td>
@@ -246,11 +261,22 @@ export default function StaffTicketQueue() {
     <li key={ticket.id} className="mb-3">
       <div
         className="d-block p-3"
+        role="link"
+        tabIndex={0}
+        aria-label={`Open ticket ${ticket.ticketNumber}`}
         style={{
           ...panelStyle,
           overflowWrap: "anywhere",
           wordBreak: "break-word",
           minWidth: 0,
+          cursor: "pointer",
+        }}
+        onClick={() => navigate(`/staff/tickets/${ticket.id}`)}
+        onKeyDown={event => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            navigate(`/staff/tickets/${ticket.id}`);
+          }
         }}
       >
         <div className="row g-3">
@@ -350,6 +376,7 @@ export default function StaffTicketQueue() {
               <Updated date={ticket.updatedAt} />
             </div>
           </div>
+
         </div>
       </div>
     </li>

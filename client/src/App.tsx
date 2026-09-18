@@ -16,6 +16,7 @@ import MyTickets from "./pages/MyTickets.js";
 import CreateTicket from "./pages/CreateTicket.js";
 import TicketDetail from "./pages/TicketDetail.js";
 import StaffTicketQueue from "./pages/StaffTicketQueue.js";
+import StaffTicketDetail from "./pages/StaffTicketDetail.js";
 
 function HomeRedirect() {
   const { user, loading } =
@@ -158,6 +159,15 @@ export default function App() {
             element={
               <AuthGuard roles={["IT_STAFF", "ADMINISTRATOR"]}>
                 <StaffTicketQueue />
+              </AuthGuard>
+            }
+          />
+
+          <Route
+            path="/staff/tickets/:id"
+            element={
+              <AuthGuard roles={["IT_STAFF", "ADMINISTRATOR"]}>
+                <StaffTicketDetail />
               </AuthGuard>
             }
           />

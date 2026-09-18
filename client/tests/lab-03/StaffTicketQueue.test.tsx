@@ -36,11 +36,19 @@ describe("Staff Ticket Queue (UI-06)", () => {
         expect(within(area).getByText(text)).toBeInTheDocument();
       }
     }
+    expect(within(table).getByRole("columnheader", { name: "Requester" })).toBeInTheDocument();
     expect(within(table).getByRole("columnheader", { name: "Requested Priority" })).toBeInTheDocument();
     expect(within(table).getByRole("columnheader", { name: "IT Priority" })).toBeInTheDocument();
-    const cells = within(within(table).getAllByRole("row")[1]).getAllByRole("cell");
-    expect(cells[3]).toHaveTextContent("Medium");
-    expect(cells[4]).toHaveTextContent("High");
+    const ticketRow = within(table).getByRole("link", { name: "Open ticket TKT-2026-000015" });
+    const cells = within(ticketRow).getAllByRole("cell");
+    expect(cells[0]).toHaveTextContent("TKT-2026-000015");
+    expect(cells[1]).toHaveTextContent("A Requester");
+    expect(cells[1]).toHaveTextContent("a@example.test");
+    expect(cells[4]).toHaveTextContent("Medium");
+    expect(cells[5]).toHaveTextContent("High");
+    expect(within(ticketRow).queryByRole("button")).not.toBeInTheDocument();
+    expect(within(cards).getByRole("link", { name: "Open ticket TKT-2026-000015" })).toBeInTheDocument();
+    expect(within(cards).queryByRole("button", { name: "Open Ticket" })).not.toBeInTheDocument();
     expect(within(cards).getByText("Requested Priority")).toBeInTheDocument();
     expect(within(cards).getByText("IT Priority")).toBeInTheDocument();
     const pagination = screen.getByRole("navigation", { name: "Queue pagination" });
@@ -54,7 +62,7 @@ describe("Staff Ticket Queue (UI-06)", () => {
     expect(within(screen.getByRole("region", { name: "Queue controls" })).queryByLabelText("Tickets per page")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Ticket Queue" })).toBeInTheDocument();
     expect(api.fetchStaffTickets).toHaveBeenCalledWith(expect.objectContaining({ sortBy: "updatedAt", sortDir: "desc", page: 1, pageSize: 10 }));
-    expect(screen.queryByRole("link", { name: /open|create ticket/i })).not.toBeInTheDocument();
+    
     expect(screen.queryByRole("button", { name: /claim|reassign|save|post/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/internal notes/i)).not.toBeInTheDocument();
   });

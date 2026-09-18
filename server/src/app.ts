@@ -9,6 +9,10 @@ import { Prisma } from "@prisma/client";
 import { getPrisma } from "./prisma.js";
 import { validateCreateTicket } from "./validateCreateTicket.js";
 import { validateStaffQueueQuery } from "./validateStaffQueueQuery.js";
+import {
+  canTransitionTicketStatus,
+  isTicketStatus,
+} from "./statusTransitions.js";
 import { createTicketWithGeneratedNumber } from "./ticketNumber.js";
 import { upload, UPLOADS_DIR } from "./attachmentUpload.js";
 import {
@@ -473,6 +477,545 @@ app.get(
       });
     } catch {
       res.status(500).json({ error: "UNEXPECTED_ERROR" });
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// Lab 3 Issue 6 — IT Staff Ticket Detail & Operations
+//
+// Operational Ticket Detail and mutations are available only to active,
+// authenticated IT Staff and Administrators who have completed any required
+// password change. Requester-facing Ticket routes remain separate below.
+// ---------------------------------------------------------------------------
+
+// GET /api/staff/tickets/:id
+// Return the complete operational Ticket Detail used by Staff/Admin.
+// Internal Notes are intentionally present here because this endpoint is
+// restricted to the operational roles.
+app.get(
+  "/api/staff/tickets/:id",
+  requireAuth,
+  requirePasswordChanged,
+  requireRole("IT_STAFF", "ADMINISTRATOR"),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const ticketId = Number(req.params.id);
+
+    if (!Number.isInteger(ticketId) || ticketId <= 0) {
+      res.status(400).json({
+        error: "INVALID_TICKET_ID",
+      });
+      return;
+    }
+
+    try {
+      const ticket = await getPrisma().ticket.findUnique({
+        where: {
+          id: ticketId,
+        },
+        select: {
+          id: true,
+          ticketNumber: true,
+          summary: true,
+          description: true,
+          requestedPriority: true,
+          itPriority: true,
+          status: true,
+          requesterResolvedAt: true,
+          requesterResolvedById: true,
+          createdAt: true,
+          updatedAt: true,
+          requester: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+          category: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          relatedSystem: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          owner: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              role: true,
+            },
+          },
+          attachments: {
+            orderBy: [
+              {
+                createdAt: "asc",
+              },
+              {
+                id: "asc",
+              },
+            ],
+            select: {
+              id: true,
+              fileName: true,
+              sizeBytes: true,
+              mimeType: true,
+              isRemoved: true,
+              removedAt: true,
+              removedReason: true,
+              createdAt: true,
+            },
+          },
+          publicComments: {
+            orderBy: [
+              {
+                createdAt: "asc",
+              },
+              {
+                id: "asc",
+              },
+            ],
+            select: {
+              id: true,
+              content: true,
+              createdAt: true,
+              author: {
+                select: {
+                  id: true,
+                  name: true,
+                  role: true,
+                },
+              },
+            },
+          },
+          internalNotes: {
+            orderBy: [
+              {
+                createdAt: "asc",
+              },
+              {
+                id: "asc",
+              },
+            ],
+            select: {
+              id: true,
+              content: true,
+              createdAt: true,
+              author: {
+                select: {
+                  id: true,
+                  name: true,
+                  role: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!ticket) {
+        res.status(404).json({
+          error: "TICKET_NOT_FOUND",
+        });
+        return;
+      }
+
+      res.status(200).json(ticket);
+    } catch (err) {
+      console.error(
+        "Failed to load Staff Ticket Detail:",
+        err
+      );
+
+      res.status(500).json({
+        error: "UNEXPECTED_ERROR",
+      });
+    }
+  }
+);
+
+// POST /api/staff/tickets/:id/claim
+// BR-23: claim assigns the current Staff/Admin only when the Ticket is
+// currently unassigned. updateMany makes the ownership check and write one
+// atomic database operation so two stale clients cannot both claim it.
+app.post(
+  "/api/staff/tickets/:id/claim",
+  requireAuth,
+  requireSameOrigin,
+  requirePasswordChanged,
+  requireRole("IT_STAFF", "ADMINISTRATOR"),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const ticketId = Number(req.params.id);
+
+    if (!Number.isInteger(ticketId) || ticketId <= 0) {
+      res.status(400).json({
+        error: "INVALID_TICKET_ID",
+      });
+      return;
+    }
+
+    try {
+      const prisma = getPrisma();
+
+      const claimed = await prisma.ticket.updateMany({
+        where: {
+          id: ticketId,
+          ownerId: null,
+        },
+        data: {
+          ownerId: req.authUser!.id,
+        },
+      });
+
+      if (claimed.count === 0) {
+        const existing = await prisma.ticket.findUnique({
+          where: {
+            id: ticketId,
+          },
+          select: {
+            id: true,
+          },
+        });
+
+        if (!existing) {
+          res.status(404).json({
+            error: "TICKET_NOT_FOUND",
+          });
+          return;
+        }
+
+        res.status(409).json({
+          error: "TICKET_ALREADY_ASSIGNED",
+        });
+        return;
+      }
+
+      const updated = await prisma.ticket.findUnique({
+        where: {
+          id: ticketId,
+        },
+        select: {
+          id: true,
+          owner: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              role: true,
+            },
+          },
+        },
+      });
+
+      res.status(200).json(updated);
+    } catch (err) {
+      console.error(
+        "Failed to claim Ticket:",
+        err
+      );
+
+      res.status(500).json({
+        error: "UNEXPECTED_ERROR",
+      });
+    }
+  }
+);
+
+// PATCH /api/staff/tickets/:id/owner
+// BR-21/BR-22/BR-24: owner may be cleared with null, otherwise the target
+// must be an active IT Staff or Administrator.
+app.patch(
+  "/api/staff/tickets/:id/owner",
+  requireAuth,
+  requireSameOrigin,
+  requirePasswordChanged,
+  requireRole("IT_STAFF", "ADMINISTRATOR"),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const ticketId = Number(req.params.id);
+
+    if (!Number.isInteger(ticketId) || ticketId <= 0) {
+      res.status(400).json({
+        error: "INVALID_TICKET_ID",
+      });
+      return;
+    }
+
+    const { ownerId } = req.body as {
+      ownerId?: unknown;
+    };
+
+    if (
+      ownerId !== null &&
+      (!Number.isInteger(ownerId) ||
+        (ownerId as number) <= 0)
+    ) {
+      res.status(400).json({
+        error: "INVALID_OWNER",
+      });
+      return;
+    }
+
+    try {
+      const prisma = getPrisma();
+
+      const ticket = await prisma.ticket.findUnique({
+        where: {
+          id: ticketId,
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      if (!ticket) {
+        res.status(404).json({
+          error: "TICKET_NOT_FOUND",
+        });
+        return;
+      }
+
+      if (ownerId !== null) {
+        const owner = await prisma.user.findFirst({
+          where: {
+            id: ownerId as number,
+            isActive: true,
+            role: {
+              in: [
+                "IT_STAFF",
+                "ADMINISTRATOR",
+              ],
+            },
+          },
+          select: {
+            id: true,
+          },
+        });
+
+        if (!owner) {
+          res.status(400).json({
+            error: "INVALID_OWNER",
+          });
+          return;
+        }
+      }
+
+      const updated = await prisma.ticket.update({
+        where: {
+          id: ticketId,
+        },
+        data: {
+          ownerId:
+            ownerId === null
+              ? null
+              : (ownerId as number),
+        },
+        select: {
+          id: true,
+          owner: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              role: true,
+            },
+          },
+        },
+      });
+
+      res.status(200).json(updated);
+    } catch (err) {
+      console.error(
+        "Failed to update Ticket owner:",
+        err
+      );
+
+      res.status(500).json({
+        error: "UNEXPECTED_ERROR",
+      });
+    }
+  }
+);
+
+// PATCH /api/staff/tickets/:id/it-priority
+// Requested Priority remains immutable. Only itPriority is updated.
+app.patch(
+  "/api/staff/tickets/:id/it-priority",
+  requireAuth,
+  requireSameOrigin,
+  requirePasswordChanged,
+  requireRole("IT_STAFF", "ADMINISTRATOR"),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const ticketId = Number(req.params.id);
+
+    if (!Number.isInteger(ticketId) || ticketId <= 0) {
+      res.status(400).json({
+        error: "INVALID_TICKET_ID",
+      });
+      return;
+    }
+
+    const { itPriority } = req.body as {
+      itPriority?: unknown;
+    };
+
+    if (
+      itPriority !== "LOW" &&
+      itPriority !== "MEDIUM" &&
+      itPriority !== "HIGH"
+    ) {
+      res.status(400).json({
+        error: "VALIDATION_FAILED",
+        fields: {
+          itPriority:
+            "IT Priority must be LOW, MEDIUM, or HIGH.",
+        },
+      });
+      return;
+    }
+
+    try {
+      const prisma = getPrisma();
+
+      const ticket = await prisma.ticket.findUnique({
+        where: {
+          id: ticketId,
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      if (!ticket) {
+        res.status(404).json({
+          error: "TICKET_NOT_FOUND",
+        });
+        return;
+      }
+
+      const updated = await prisma.ticket.update({
+        where: {
+          id: ticketId,
+        },
+        data: {
+          itPriority,
+        },
+        select: {
+          id: true,
+          requestedPriority: true,
+          itPriority: true,
+        },
+      });
+
+      res.status(200).json(updated);
+    } catch (err) {
+      console.error(
+        "Failed to update IT Priority:",
+        err
+      );
+
+      res.status(500).json({
+        error: "UNEXPECTED_ERROR",
+      });
+    }
+  }
+);
+
+// PATCH /api/staff/tickets/:id/status
+// BR-28–BR-31: only the documented status values and BR-30 transitions are
+// accepted. The UI also confirms destructive/completing transitions, while
+// this backend remains authoritative for direct API calls.
+app.patch(
+  "/api/staff/tickets/:id/status",
+  requireAuth,
+  requireSameOrigin,
+  requirePasswordChanged,
+  requireRole("IT_STAFF", "ADMINISTRATOR"),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const ticketId = Number(req.params.id);
+
+    if (!Number.isInteger(ticketId) || ticketId <= 0) {
+      res.status(400).json({
+        error: "INVALID_TICKET_ID",
+      });
+      return;
+    }
+
+    const { status } = req.body as {
+      status?: unknown;
+    };
+
+    if (!isTicketStatus(status)) {
+      res.status(400).json({
+        error: "VALIDATION_FAILED",
+        fields: {
+          status: "Choose a valid Ticket status.",
+        },
+      });
+      return;
+    }
+
+    try {
+      const prisma = getPrisma();
+
+      const ticket = await prisma.ticket.findUnique({
+        where: {
+          id: ticketId,
+        },
+        select: {
+          id: true,
+          status: true,
+        },
+      });
+
+      if (!ticket) {
+        res.status(404).json({
+          error: "TICKET_NOT_FOUND",
+        });
+        return;
+      }
+
+      if (
+        !canTransitionTicketStatus(
+          ticket.status,
+          status
+        )
+      ) {
+        res.status(409).json({
+          error: "INVALID_STATUS_TRANSITION",
+        });
+        return;
+      }
+
+      const updated = await prisma.ticket.update({
+        where: {
+          id: ticketId,
+        },
+        data: {
+          status,
+        },
+        select: {
+          id: true,
+          status: true,
+          ownerId: true,
+        },
+      });
+
+      res.status(200).json(updated);
+    } catch (err) {
+      console.error(
+        "Failed to update Ticket status:",
+        err
+      );
+
+      res.status(500).json({
+        error: "UNEXPECTED_ERROR",
+      });
     }
   }
 );
@@ -1393,12 +1936,14 @@ app.post(
 );
 
 // ---------------------------------------------------------------------------
-// Lab 3 Issue 4 — Internal Notes authorization boundary
+// Lab 3 Issue 6 — Internal Notes
 //
-// Full IT Staff / Administrator Internal Note behavior belongs to the staff
-// Ticket operations work. Issue 4 establishes that Requesters cannot retrieve
-// or create Internal Notes and no Internal Note content is returned to them.
+// Internal Notes are append-only and restricted to IT Staff/Administrators.
+// They are never serialized by Requester Ticket endpoints. The backend
+// supplies author identity and createdAt.
 // ---------------------------------------------------------------------------
+
+// GET /api/tickets/:id/internal-notes
 app.get(
   "/api/tickets/:id/internal-notes",
   requireAuth,
@@ -1408,16 +1953,90 @@ app.get(
     "ADMINISTRATOR"
   ),
   async (
-    _req: AuthenticatedRequest,
+    req: AuthenticatedRequest,
     res: Response
   ) => {
-    res.status(501).json({
-      error:
-        "NOT_IMPLEMENTED",
-    });
+    const ticketId =
+      Number(req.params.id);
+
+    if (
+      !Number.isInteger(ticketId) ||
+      ticketId <= 0
+    ) {
+      res.status(400).json({
+        error:
+          "INVALID_TICKET_ID",
+      });
+      return;
+    }
+
+    try {
+      const prisma = getPrisma();
+
+      const ticket =
+        await prisma.ticket.findUnique({
+          where: {
+            id: ticketId,
+          },
+          select: {
+            id: true,
+          },
+        });
+
+      if (!ticket) {
+        res.status(404).json({
+          error:
+            "TICKET_NOT_FOUND",
+        });
+        return;
+      }
+
+      const notes =
+        await prisma.internalNote.findMany({
+          where: {
+            ticketId,
+          },
+          orderBy: [
+            {
+              createdAt:
+                "asc",
+            },
+            {
+              id: "asc",
+            },
+          ],
+          select: {
+            id: true,
+            content: true,
+            createdAt: true,
+            author: {
+              select: {
+                id: true,
+                name: true,
+                role: true,
+              },
+            },
+          },
+        });
+
+      res.status(200).json({
+        items: notes,
+      });
+    } catch (err) {
+      console.error(
+        "Failed to load Internal Notes:",
+        err
+      );
+
+      res.status(500).json({
+        error:
+          "UNEXPECTED_ERROR",
+      });
+    }
   }
 );
 
+// POST /api/tickets/:id/internal-notes
 app.post(
   "/api/tickets/:id/internal-notes",
   requireAuth,
@@ -1428,13 +2047,113 @@ app.post(
     "ADMINISTRATOR"
   ),
   async (
-    _req: AuthenticatedRequest,
+    req: AuthenticatedRequest,
     res: Response
   ) => {
-    res.status(501).json({
-      error:
-        "NOT_IMPLEMENTED",
-    });
+    const ticketId =
+      Number(req.params.id);
+
+    if (
+      !Number.isInteger(ticketId) ||
+      ticketId <= 0
+    ) {
+      res.status(400).json({
+        error:
+          "INVALID_TICKET_ID",
+      });
+      return;
+    }
+
+    const { content } =
+      req.body as {
+        content?: unknown;
+      };
+
+    if (
+      typeof content !==
+      "string"
+    ) {
+      res.status(400).json({
+        error:
+          "INVALID_INTERNAL_NOTE",
+      });
+      return;
+    }
+
+    const trimmedContent =
+      content.trim();
+
+    if (
+      trimmedContent.length <
+        1 ||
+      trimmedContent.length >
+        MAX_COMMENT_LENGTH
+    ) {
+      res.status(400).json({
+        error:
+          "INVALID_INTERNAL_NOTE",
+      });
+      return;
+    }
+
+    try {
+      const prisma = getPrisma();
+
+      const ticket =
+        await prisma.ticket.findUnique({
+          where: {
+            id: ticketId,
+          },
+          select: {
+            id: true,
+          },
+        });
+
+      if (!ticket) {
+        res.status(404).json({
+          error:
+            "TICKET_NOT_FOUND",
+        });
+        return;
+      }
+
+      const note =
+        await prisma.internalNote.create({
+          data: {
+            ticketId,
+            authorId:
+              req.authUser!.id,
+            content:
+              trimmedContent,
+          },
+          select: {
+            id: true,
+            content: true,
+            createdAt: true,
+            author: {
+              select: {
+                id: true,
+                name: true,
+                role: true,
+              },
+            },
+          },
+        });
+
+      res.status(201).json(
+        note
+      );
+    } catch (err) {
+      console.error(
+        "Failed to create Internal Note:",
+        err
+      );
+
+      res.status(500).json({
+        error:
+          "UNEXPECTED_ERROR",
+      });
+    }
   }
 );
 
@@ -1747,7 +2466,11 @@ app.get(
   "/api/attachments/:id/download",
   requireAuth,
   requirePasswordChanged,
-  requireRole("REQUESTER"),
+  requireRole(
+    "REQUESTER",
+    "IT_STAFF",
+    "ADMINISTRATOR"
+  ),
   async (
     req: AuthenticatedRequest,
     res: Response
@@ -1755,8 +2478,8 @@ app.get(
     const attachmentId =
       Number(req.params.id);
 
-    const requesterId =
-      req.authUser!.id;
+    const user =
+      req.authUser!;
 
     if (
       Number.isNaN(
@@ -1790,13 +2513,19 @@ app.get(
           }
         );
 
-      // BR-09-style ownership check:
-      // not owned or doesn't exist -> same 404.
+      // Requesters may download only their own Ticket attachments.
+      // Staff/Admin may download attachments from the shared operational queue.
+      // A Requester ownership failure stays indistinguishable from a missing
+      // attachment, preserving the existing safe 404 behavior.
       if (
         !attachment ||
-        attachment.ticket
-          .requesterId !==
-          requesterId
+        (
+          user.role ===
+            "REQUESTER" &&
+          attachment.ticket
+            .requesterId !==
+            user.id
+        )
       ) {
         res.status(404).json({
           error:
