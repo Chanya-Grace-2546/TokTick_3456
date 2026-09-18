@@ -7,6 +7,7 @@ import bcrypt from "bcryptjs";
 import { Prisma } from "@prisma/client";
 
 import { getPrisma } from "./prisma.js";
+import { adminUsers } from "./adminUsers.js";
 import { validateCreateTicket } from "./validateCreateTicket.js";
 import { validateStaffQueueQuery } from "./validateStaffQueueQuery.js";
 import {
@@ -50,6 +51,7 @@ app.use(
 
 app.use(express.json());
 app.use(cookieParser());
+app.use("/api/admin/users", adminUsers);
 
 // ---------------------------------------------------------------------------
 // Issue 2 — API health check

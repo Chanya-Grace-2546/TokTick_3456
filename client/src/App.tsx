@@ -17,6 +17,7 @@ import CreateTicket from "./pages/CreateTicket.js";
 import TicketDetail from "./pages/TicketDetail.js";
 import StaffTicketQueue from "./pages/StaffTicketQueue.js";
 import StaffTicketDetail from "./pages/StaffTicketDetail.js";
+import UserManagement from "./pages/UserManagement.js";
 
 function HomeRedirect() {
   const { user, loading } =
@@ -65,26 +66,13 @@ function HomeRedirect() {
     return <Navigate to="/staff/tickets" replace />;
   }
 
-  return (
-    <div className="container py-5">
-      <h1 className="h4">
-        TokTickIT
-      </h1>
+  return <Navigate to="/admin/users" replace />;
+}
 
-      <p className="mb-1">
-        Signed in as {user.name}.
-      </p>
-
-      <p className="text-muted">
-        Role: {user.role}
-      </p>
-
-      <p>
-        The Administrator
-        workspace will be added in
-        the next Lab 3 issues.
-      </p>
-    </div>
+function AdministratorPage() {
+  const { user } = useAuth();
+  return user?.role === "ADMINISTRATOR" ? <UserManagement /> : (
+    <div className="container py-4"><div role="alert" className="alert alert-danger">You do not have permission to manage Users.</div></div>
   );
 }
 
@@ -93,6 +81,7 @@ export default function App() {
     <AuthProvider>
       <AppShell>
         <Routes>
+          <Route path="/admin/users" element={<AuthGuard><AdministratorPage /></AuthGuard>} />
           <Route
             path="/"
             element={

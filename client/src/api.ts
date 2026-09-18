@@ -1,6 +1,42 @@
 const API_URL =
   import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
+// Lab 3 Issue 7 — Administrator User Management.
+export type AdminUser = AuthUser;
+export type AdminUserFields = Pick<AdminUser, "name" | "email" | "role" | "isActive">;
+export interface AdminUserQuery { search?: string; role?: UserRole }
+export class AdminUserError extends Error {
+  constructor(public status: number, public code: string, public fields: FieldErrors = {}) { super(code); }
+}
+
+async function adminRequest<T>(path: string, method = "GET", body?: unknown): Promise<T> {
+  const response = await fetch(`${API_URL}/api/admin/users${path}`, {
+    method, credentials: "include",
+    ...(body === undefined ? {} : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new AdminUserError(response.status, error.error ?? "ADMIN_REQUEST_FAILED", error.fields ?? {});
+  }
+  return response.status === 204 ? undefined as T : response.json();
+}
+
+export function fetchAdminUsers(params: AdminUserQuery): Promise<{ items: AdminUser[] }> {
+  const query = new URLSearchParams();
+  if (params.search?.trim()) query.set("search", params.search.trim());
+  if (params.role) query.set("role", params.role);
+  return adminRequest(query.size ? `?${query}` : "");
+}
+export function createAdminUser(body: AdminUserFields & { initialPassword: string }): Promise<AdminUser> {
+  return adminRequest("", "POST", body);
+}
+export function updateAdminUser(id: number, body: Partial<AdminUserFields>): Promise<AdminUser> {
+  return adminRequest(`/${id}`, "PATCH", body);
+}
+export function setAdminInitialPassword(id: number, body: { initialPassword: string; confirmPassword: string }): Promise<void> {
+  return adminRequest(`/${id}/initial-password`, "POST", body);
+}
+
 export interface Category {
   id: number;
   name: string;
