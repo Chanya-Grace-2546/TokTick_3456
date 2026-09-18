@@ -733,3 +733,208 @@ export async function markProblemAppearsResolved(
 
   return res.json();
 }
+
+
+// Lab 3 Issue 6 — IT Staff Ticket Detail & Operations
+
+export interface StaffTicketDetail {
+  id: number;
+  ticketNumber: string;
+  summary: string;
+  description: string;
+  requestedPriority: Priority;
+  itPriority: Priority;
+  status: StaffTicketStatus;
+  requesterResolvedAt: string | null;
+  requesterResolvedById: number | null;
+  createdAt: string;
+  updatedAt: string;
+  requester: {
+    id: number;
+    name: string;
+    email: string;
+  };
+  category: Category;
+  relatedSystem: RelatedSystem;
+  owner: StaffOwner | null;
+  attachments: AttachmentMeta[];
+  publicComments: PublicComment[];
+  internalNotes: InternalNote[];
+}
+
+export interface InternalNote {
+  id: number;
+  content: string;
+  author: PublicCommentAuthor;
+  createdAt: string;
+}
+
+export interface InternalNotesResponse {
+  items: InternalNote[];
+}
+
+export class StaffTicketOperationError extends Error {
+  constructor(
+    public status: number,
+    public code: string,
+    public fields: FieldErrors = {}
+  ) {
+    super(code);
+  }
+}
+
+async function readStaffOperationResponse<T>(
+  res: Response
+): Promise<T> {
+  if (!res.ok) {
+    const body = await res
+      .json()
+      .catch(() => ({}));
+
+    throw new StaffTicketOperationError(
+      res.status,
+      body.error ?? "STAFF_TICKET_OPERATION_FAILED",
+      body.fields ?? {}
+    );
+  }
+
+  return res.json();
+}
+
+export async function fetchStaffTicketDetail(
+  ticketId: number
+): Promise<StaffTicketDetail> {
+  return readStaffOperationResponse(
+    await fetch(
+      `${API_URL}/api/staff/tickets/${ticketId}`,
+      {
+        credentials: "include",
+      }
+    )
+  );
+}
+
+export async function claimStaffTicket(
+  ticketId: number
+): Promise<{
+  id: number;
+  owner: StaffOwner;
+}> {
+  return readStaffOperationResponse(
+    await fetch(
+      `${API_URL}/api/staff/tickets/${ticketId}/claim`,
+      {
+        method: "POST",
+        credentials: "include",
+      }
+    )
+  );
+}
+
+export async function updateStaffTicketOwner(
+  ticketId: number,
+  ownerId: number | null
+): Promise<{
+  id: number;
+  owner: StaffOwner | null;
+}> {
+  return readStaffOperationResponse(
+    await fetch(
+      `${API_URL}/api/staff/tickets/${ticketId}/owner`,
+      {
+        method: "PATCH",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ownerId,
+        }),
+      }
+    )
+  );
+}
+
+export async function updateStaffTicketPriority(
+  ticketId: number,
+  itPriority: Priority
+): Promise<{
+  id: number;
+  requestedPriority: Priority;
+  itPriority: Priority;
+}> {
+  return readStaffOperationResponse(
+    await fetch(
+      `${API_URL}/api/staff/tickets/${ticketId}/it-priority`,
+      {
+        method: "PATCH",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          itPriority,
+        }),
+      }
+    )
+  );
+}
+
+export async function updateStaffTicketStatus(
+  ticketId: number,
+  status: StaffTicketStatus
+): Promise<{
+  id: number;
+  status: StaffTicketStatus;
+  ownerId: number | null;
+}> {
+  return readStaffOperationResponse(
+    await fetch(
+      `${API_URL}/api/staff/tickets/${ticketId}/status`,
+      {
+        method: "PATCH",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          status,
+        }),
+      }
+    )
+  );
+}
+
+export async function fetchInternalNotes(
+  ticketId: number
+): Promise<InternalNotesResponse> {
+  return readStaffOperationResponse(
+    await fetch(
+      `${API_URL}/api/tickets/${ticketId}/internal-notes`,
+      {
+        credentials: "include",
+      }
+    )
+  );
+}
+
+export async function createInternalNote(
+  ticketId: number,
+  content: string
+): Promise<InternalNote> {
+  return readStaffOperationResponse(
+    await fetch(
+      `${API_URL}/api/tickets/${ticketId}/internal-notes`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          content,
+        }),
+      }
+    )
+  );
+}
