@@ -44,6 +44,8 @@ export default function AppShell({
     user?.role === "REQUESTER" &&
     !user?.mustChangePassword;
 
+  const showStaffNav = user?.role === "IT_STAFF" && !user.mustChangePassword;
+
   async function handleLogout() {
     setMenuOpen(false);
     setMobileNavOpen(false);
@@ -104,6 +106,11 @@ export default function AppShell({
           </Link>
 
           <nav className="d-none d-md-flex align-items-center gap-3">
+            {showStaffNav && (
+              <Link to="/staff/tickets" className="text-white text-decoration-none px-2 py-1 rounded" aria-current={isActive("/staff/tickets") ? "page" : undefined} style={{ backgroundColor: isActive("/staff/tickets") ? zenGreen.secondary : "transparent", fontWeight: 600 }}>
+                Ticket Queue
+              </Link>
+            )}
             {showRequesterNav && (
               <>
                 <Link
@@ -259,6 +266,11 @@ export default function AppShell({
           >
             {user ? (
               <div className="d-flex flex-column gap-2">
+                {showStaffNav && (
+                  <Link to="/staff/tickets" className="text-white text-decoration-none" aria-current={isActive("/staff/tickets") ? "page" : undefined} onClick={() => setMobileNavOpen(false)}>
+                    Ticket Queue
+                  </Link>
+                )}
                 {showRequesterNav && (
                   <>
                     <Link

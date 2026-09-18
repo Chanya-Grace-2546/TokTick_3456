@@ -15,6 +15,7 @@ import HealthCheck from "./pages/HealthCheck.js";
 import MyTickets from "./pages/MyTickets.js";
 import CreateTicket from "./pages/CreateTicket.js";
 import TicketDetail from "./pages/TicketDetail.js";
+import StaffTicketQueue from "./pages/StaffTicketQueue.js";
 
 function HomeRedirect() {
   const { user, loading } =
@@ -59,6 +60,10 @@ function HomeRedirect() {
     );
   }
 
+  if (user.role === "IT_STAFF") {
+    return <Navigate to="/staff/tickets" replace />;
+  }
+
   return (
     <div className="container py-5">
       <h1 className="h4">
@@ -74,8 +79,8 @@ function HomeRedirect() {
       </p>
 
       <p>
-        Staff and Administrator
-        workspaces will be added in
+        The Administrator
+        workspace will be added in
         the next Lab 3 issues.
       </p>
     </div>
@@ -146,6 +151,15 @@ export default function App() {
           <Route
             path="/dev-check"
             element={<HealthCheck />}
+          />
+
+          <Route
+            path="/staff/tickets"
+            element={
+              <AuthGuard roles={["IT_STAFF", "ADMINISTRATOR"]}>
+                <StaffTicketQueue />
+              </AuthGuard>
+            }
           />
 
           <Route

@@ -192,6 +192,79 @@ export interface TicketListParams {
   pageSize?: number;
 }
 
+// Lab 3 Issue 5 — shared Staff Queue. This is not the Requester list contract.
+export type StaffTicketStatus = "NEW" | "OPEN" | "IN_PROGRESS" | "WAITING_FOR_REQUESTER" | "RESOLVED" | "CLOSED" | "REOPENED" | "CANCELLED";
+export type StaffQueueSort = "ticketNumber" | "createdAt" | "updatedAt" | "requestedPriority" | "itPriority" | "status";
+
+export interface StaffQueueParams {
+  search?: string;
+  category?: number;
+  requestedPriority?: Priority;
+  itPriority?: Priority;
+  status?: StaffTicketStatus;
+  owner?: "unassigned" | "me" | number;
+  sortBy?: StaffQueueSort;
+  sortDir?: "asc" | "desc";
+  page?: number;
+  pageSize?: 10 | 20 | 50;
+}
+
+export interface StaffQueueItem {
+  id: number;
+  ticketNumber: string;
+  summary: string;
+  createdAt: string;
+  updatedAt: string;
+  category: Category;
+  requester: { id: number; name: string; email: string };
+  requestedPriority: Priority;
+  itPriority: Priority;
+  status: StaffTicketStatus;
+  owner: { id: number; name: string } | null;
+}
+
+export interface StaffQueueResponse {
+  items: StaffQueueItem[];
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+}
+
+export interface StaffOwner {
+  id: number;
+  name: string;
+  email: string;
+  role: "IT_STAFF" | "ADMINISTRATOR";
+}
+
+export class StaffQueueError extends Error {
+  constructor(public status: number, public code: string, public fields: FieldErrors = {}) {
+    super(code);
+  }
+}
+
+async function readStaffResponse<T>(res: Response): Promise<T> {
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new StaffQueueError(res.status, body.error ?? "LOAD_QUEUE_FAILED", body.fields ?? {});
+  }
+  return res.json();
+}
+
+export async function fetchStaffTickets(params: StaffQueueParams): Promise<StaffQueueResponse> {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== "") query.set(key, String(value));
+  }
+  const suffix = query.size ? `?${query.toString()}` : "";
+  return readStaffResponse(await fetch(`${API_URL}/api/staff/tickets${suffix}`, { credentials: "include" }));
+}
+
+export async function fetchStaffOwners(): Promise<StaffOwner[]> {
+  return readStaffResponse(await fetch(`${API_URL}/api/staff/owners`, { credentials: "include" }));
+}
+
 export async function fetchTickets(
   params: TicketListParams
 ): Promise<TicketListResponse> {
