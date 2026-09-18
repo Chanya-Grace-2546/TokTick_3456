@@ -4,9 +4,11 @@ import fs from "fs";
 import path from "path";
 import cookieParser from "cookie-parser";
 import bcrypt from "bcryptjs";
+import { Prisma } from "@prisma/client";
 
 import { getPrisma } from "./prisma.js";
 import { validateCreateTicket } from "./validateCreateTicket.js";
+import { validateStaffQueueQuery } from "./validateStaffQueueQuery.js";
 import { createTicketWithGeneratedNumber } from "./ticketNumber.js";
 import { upload, UPLOADS_DIR } from "./attachmentUpload.js";
 import {
@@ -383,6 +385,94 @@ app.get(
       res.status(500).json({
         error: "Failed to load related systems",
       });
+    }
+  }
+);
+
+// Lab 3 Issue 5 — read-only shared Staff Queue and Owner filter choices.
+// Keep this contract independent of the Requester list below.
+app.get(
+  "/api/staff/owners",
+  requireAuth,
+  requirePasswordChanged,
+  requireRole("IT_STAFF", "ADMINISTRATOR"),
+  async (_req: AuthenticatedRequest, res: Response) => {
+    try {
+      const owners = await getPrisma().user.findMany({
+        where: { isActive: true, role: { in: ["IT_STAFF", "ADMINISTRATOR"] } },
+        select: { id: true, name: true, email: true, role: true },
+        orderBy: [{ name: "asc" }, { id: "asc" }],
+      });
+      res.status(200).json(owners);
+    } catch {
+      res.status(500).json({ error: "UNEXPECTED_ERROR" });
+    }
+  }
+);
+
+app.get(
+  "/api/staff/tickets",
+  requireAuth,
+  requirePasswordChanged,
+  requireRole("IT_STAFF", "ADMINISTRATOR"),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const parsed = validateStaffQueueQuery(req.query);
+    if (parsed.fields) {
+      res.status(400).json({ error: "INVALID_QUERY", fields: parsed.fields });
+      return;
+    }
+    const query = parsed.value;
+    try {
+      const prisma = getPrisma();
+      if (typeof query.owner === "number") {
+        const owner = await prisma.user.findFirst({
+          where: { id: query.owner, isActive: true, role: { in: ["IT_STAFF", "ADMINISTRATOR"] } },
+          select: { id: true },
+        });
+        if (!owner) {
+          res.status(400).json({ error: "INVALID_QUERY", fields: { owner: "Choose an active IT Staff or Administrator owner." } });
+          return;
+        }
+      }
+
+      const where: Prisma.TicketWhereInput = {
+        categoryId: query.category,
+        requestedPriority: query.requestedPriority,
+        itPriority: query.itPriority,
+        status: query.status,
+        ownerId: query.owner === "unassigned" ? null : query.owner === "me" ? req.authUser!.id : query.owner,
+      };
+      if (query.search) {
+        const match = { contains: query.search, mode: "insensitive" as const };
+        where.OR = [
+          { ticketNumber: match }, { summary: match },
+          { requester: { name: match } }, { requester: { email: match } },
+        ];
+      }
+
+      const [items, totalItems] = await Promise.all([
+        prisma.ticket.findMany({
+          where,
+          // Use the PostgreSQL enum order established by existing migrations.
+          orderBy: [{ [query.sortBy]: query.sortDir }, { id: "asc" }],
+          skip: (query.page - 1) * query.pageSize,
+          take: query.pageSize,
+          select: {
+            id: true, ticketNumber: true, createdAt: true, updatedAt: true, summary: true,
+            category: { select: { id: true, name: true } },
+            requester: { select: { id: true, name: true, email: true } },
+            requestedPriority: true, itPriority: true, status: true,
+            owner: { select: { id: true, name: true } },
+          },
+        }),
+        prisma.ticket.count({ where }),
+      ]);
+      res.status(200).json({
+        items, page: query.page, pageSize: query.pageSize, totalItems,
+        totalPages: Math.max(1, Math.ceil(totalItems / query.pageSize)),
+      });
+    } catch {
+      res.status(500).json({ error: "UNEXPECTED_ERROR" });
     }
   }
 );

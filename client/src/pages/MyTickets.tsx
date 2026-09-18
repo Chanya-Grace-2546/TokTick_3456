@@ -94,11 +94,12 @@ export default function TicketsPlaceholder() {
 
   return (
     <div className="container py-5" style={{ maxWidth: 960 }}>
-      <div className="d-flex justify-content-between align-items-center mb-3">
+      <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
         <h1 className="h4 mb-0" style={{ color: zenGreen.text }}>
           My Tickets
         </h1>
-        <div className="d-flex gap-2">
+
+        <div className="d-flex gap-2 flex-wrap">
           <button
             type="button"
             className="btn btn-sm btn-outline-secondary"
@@ -107,6 +108,7 @@ export default function TicketsPlaceholder() {
           >
             Clear Filters
           </button>
+
           <Link
             to="/tickets/new"
             className="btn btn-sm"
@@ -132,6 +134,7 @@ export default function TicketsPlaceholder() {
               aria-label="Search tickets"
             />
           </div>
+
           <div className="col-12 col-md-3">
             <select
               className="form-select"
@@ -148,6 +151,7 @@ export default function TicketsPlaceholder() {
               <option value="HIGH">High</option>
             </select>
           </div>
+
           <div className="col-12 col-md-3">
             <select
               className="form-select"
@@ -182,6 +186,7 @@ export default function TicketsPlaceholder() {
           >
             Sort: {SORT_LABELS[sortBy]} ({sortDir === "asc" ? "▲" : "▼"})
           </button>
+
           {sortMenuOpen && (
             <div
               role="menu"
@@ -194,14 +199,20 @@ export default function TicketsPlaceholder() {
                   type="button"
                   role="menuitem"
                   className="btn btn-sm w-100 text-start d-flex justify-content-between"
-                  style={sortBy === field ? { backgroundColor: zenGreen.pale } : undefined}
+                  style={
+                    sortBy === field
+                      ? { backgroundColor: zenGreen.pale }
+                      : undefined
+                  }
                   onClick={() => {
                     toggleSort(field);
                     setSortMenuOpen(false);
                   }}
                 >
                   <span>{SORT_LABELS[field]}</span>
-                  {sortBy === field && <span>{sortDir === "asc" ? "▲" : "▼"}</span>}
+                  {sortBy === field && (
+                    <span>{sortDir === "asc" ? "▲" : "▼"}</span>
+                  )}
                 </button>
               ))}
             </div>
@@ -220,6 +231,7 @@ export default function TicketsPlaceholder() {
       {state === "ready" && totalItems === 0 && !hasActiveFilters && (
         <div className="p-4 text-center" style={cardStyle}>
           <p className="mb-3">You don't have any tickets yet.</p>
+
           <Link
             to="/tickets/new"
             className="btn btn-sm"
@@ -233,6 +245,7 @@ export default function TicketsPlaceholder() {
       {state === "ready" && totalItems === 0 && hasActiveFilters && (
         <div className="p-4 text-center" style={cardStyle}>
           <p className="mb-3">No tickets match your search or filters.</p>
+
           <button
             type="button"
             className="btn btn-sm btn-outline-secondary"
@@ -245,25 +258,47 @@ export default function TicketsPlaceholder() {
 
       {state === "ready" && items.length > 0 && (
         <>
-          <div className="table-responsive" style={cardStyle}>
+          <div
+            className="table-responsive d-none d-lg-block"
+            style={cardStyle}
+          >
             <table className="table mb-0">
               <thead>
                 <tr>
-                  <th role="button" onClick={() => toggleSort("ticketNumber")}>
-                    Ticket No. {sortBy === "ticketNumber" && (sortDir === "asc" ? "▲" : "▼")}
+                  <th
+                    role="button"
+                    onClick={() => toggleSort("ticketNumber")}
+                  >
+                    Ticket No.{" "}
+                    {sortBy === "ticketNumber" &&
+                      (sortDir === "asc" ? "▲" : "▼")}
                   </th>
+
                   <th>Summary</th>
                   <th>Category</th>
                   <th>Priority</th>
                   <th>Status</th>
-                  <th role="button" onClick={() => toggleSort("createdAt")}>
-                    Created Date {sortBy === "createdAt" && (sortDir === "asc" ? "▲" : "▼")}
+
+                  <th
+                    role="button"
+                    onClick={() => toggleSort("createdAt")}
+                  >
+                    Created Date{" "}
+                    {sortBy === "createdAt" &&
+                      (sortDir === "asc" ? "▲" : "▼")}
                   </th>
-                  <th role="button" onClick={() => toggleSort("updatedAt")}>
-                    Last Updated {sortBy === "updatedAt" && (sortDir === "asc" ? "▲" : "▼")}
+
+                  <th
+                    role="button"
+                    onClick={() => toggleSort("updatedAt")}
+                  >
+                    Last Updated{" "}
+                    {sortBy === "updatedAt" &&
+                      (sortDir === "asc" ? "▲" : "▼")}
                   </th>
                 </tr>
               </thead>
+
               <tbody>
                 {items.map((t) => (
                   <tr
@@ -274,14 +309,19 @@ export default function TicketsPlaceholder() {
                     <td>{t.ticketNumber}</td>
                     <td>{t.summary}</td>
                     <td>{t.category}</td>
+
                     <td>
                       <span
                         className="badge"
-                        style={{ backgroundColor: PRIORITY_BADGE[t.requestedPriority] }}
+                        style={{
+                          backgroundColor:
+                            PRIORITY_BADGE[t.requestedPriority],
+                        }}
                       >
                         {t.requestedPriority}
                       </span>
                     </td>
+
                     <td>{t.currentStatus}</td>
                     <td>{new Date(t.createdAt).toLocaleDateString()}</td>
                     <td>{new Date(t.updatedAt).toLocaleDateString()}</td>
@@ -291,8 +331,115 @@ export default function TicketsPlaceholder() {
             </table>
           </div>
 
+          <ul
+            className="list-unstyled d-lg-none mb-0"
+            aria-label="My Tickets cards"
+          >
+            {items.map((t) => (
+              <li key={t.id} className="mb-3">
+                <Link
+                  to={`/tickets/${t.id}`}
+                  aria-label={`View ticket ${t.ticketNumber}`}
+                  className="d-block text-decoration-none text-reset p-3"
+                  style={{
+                    ...cardStyle,
+                    overflowWrap: "anywhere",
+                    wordBreak: "break-word",
+                    minWidth: 0,
+                  }}
+                >
+                  <div className="row g-3">
+                    <div className="col-12">
+                      <div
+                        className="small text-muted mb-1"
+                        style={{ fontWeight: 600 }}
+                      >
+                        Ticket Number
+                      </div>
+                      <div style={{ fontWeight: 600 }}>
+                        {t.ticketNumber}
+                      </div>
+                    </div>
+
+                    <div className="col-12">
+                      <div
+                        className="small text-muted mb-1"
+                        style={{ fontWeight: 600 }}
+                      >
+                        Summary
+                      </div>
+                      <div>{t.summary}</div>
+                    </div>
+
+                    <div className="col-12">
+                      <div
+                        className="small text-muted mb-1"
+                        style={{ fontWeight: 600 }}
+                      >
+                        Category
+                      </div>
+                      <div>{t.category}</div>
+                    </div>
+
+                    <div className="col-6">
+                      <div
+                        className="small text-muted mb-1"
+                        style={{ fontWeight: 600 }}
+                      >
+                        Requested Priority
+                      </div>
+                      <span
+                        className="badge"
+                        style={{
+                          backgroundColor:
+                            PRIORITY_BADGE[t.requestedPriority],
+                        }}
+                      >
+                        {t.requestedPriority}
+                      </span>
+                    </div>
+
+                    <div className="col-6">
+                      <div
+                        className="small text-muted mb-1"
+                        style={{ fontWeight: 600 }}
+                      >
+                        Status
+                      </div>
+                      <div>{t.currentStatus}</div>
+                    </div>
+
+                    <div className="col-6">
+                      <div
+                        className="small text-muted mb-1"
+                        style={{ fontWeight: 600 }}
+                      >
+                        Created Date
+                      </div>
+                      <div>
+                        {new Date(t.createdAt).toLocaleDateString()}
+                      </div>
+                    </div>
+
+                    <div className="col-6">
+                      <div
+                        className="small text-muted mb-1"
+                        style={{ fontWeight: 600 }}
+                      >
+                        Last Updated
+                      </div>
+                      <div>
+                        {new Date(t.updatedAt).toLocaleDateString()}
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+              </li>
+            ))}
+          </ul>
+
           {totalPages > 1 && (
-            <div className="d-flex justify-content-between align-items-center mt-3">
+            <div className="d-flex justify-content-between align-items-center gap-2 mt-3">
               <button
                 type="button"
                 className="btn btn-sm btn-outline-secondary"
@@ -302,7 +449,7 @@ export default function TicketsPlaceholder() {
                 Previous
               </button>
 
-              <span className="small text-muted">
+              <span className="small text-muted text-center">
                 Page {page} of {totalPages}
               </span>
 

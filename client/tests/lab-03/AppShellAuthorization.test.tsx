@@ -50,6 +50,32 @@ describe("AppShell role authorization", () => {
     vi.restoreAllMocks();
   });
 
+  it("shows Queue navigation on desktop and mobile only for IT Staff", async () => {
+    vi.spyOn(api, "getMe").mockResolvedValue(user("IT_STAFF"));
+    renderShell();
+    expect(await screen.findByRole("link", { name: "Ticket Queue" })).toHaveAttribute("href", "/staff/tickets");
+    fireEvent.click(screen.getByRole("button", { name: "Toggle navigation" }));
+    expect(screen.getAllByRole("link", { name: "Ticket Queue" })).toHaveLength(2);
+    expect(screen.queryByRole("link", { name: "My Tickets" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /create ticket/i })).not.toBeInTheDocument();
+  });
+
+  it.each(["REQUESTER", "ADMINISTRATOR"] as const)("does not give %s default Queue navigation", async role => {
+    vi.spyOn(api, "getMe").mockResolvedValue(user(role));
+    renderShell();
+    await screen.findByRole("button", { name: /jennifer anderson/i });
+    fireEvent.click(screen.getByRole("button", { name: "Toggle navigation" }));
+    expect(screen.queryByRole("link", { name: "Ticket Queue" })).not.toBeInTheDocument();
+  });
+
+  it("hides Queue navigation during mandatory Staff password change", async () => {
+    vi.spyOn(api, "getMe").mockResolvedValue(user("IT_STAFF", true));
+    renderShell();
+    await screen.findByRole("button", { name: /jennifer anderson/i });
+    fireEvent.click(screen.getByRole("button", { name: "Toggle navigation" }));
+    expect(screen.queryByRole("link", { name: "Ticket Queue" })).not.toBeInTheDocument();
+  });
+
   it("shows Requester navigation to an authenticated Requester", async () => {
     vi.spyOn(api, "getMe").mockResolvedValue(
       user("REQUESTER")
