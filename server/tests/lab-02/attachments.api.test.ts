@@ -203,7 +203,7 @@ describe("Attachments API", () => {
         });
 
       expect(res.status).toBe(404);
-      expect(res.body.error).toBe("TICKET_NOT_FOUND");
+      expect(res.body.error).toBe("NOT_FOUND");
     });
 
     // Lab 3 security regression:
@@ -219,7 +219,7 @@ describe("Attachments API", () => {
         });
 
       expect(res.status).toBe(404);
-      expect(res.body.error).toBe("TICKET_NOT_FOUND");
+      expect(res.body.error).toBe("NOT_FOUND");
     });
 
     // BR-22: max 5 active attachments per ticket

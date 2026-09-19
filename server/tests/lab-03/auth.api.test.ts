@@ -93,12 +93,8 @@ describe("Lab 3 Authentication API", () => {
 
     expect(res.status).toBe(200);
 
-    expect(res.body.user).toMatchObject({
-      id: requesterId,
-      name: "Lab 3 Auth Requester",
-      email: requesterEmail,
-      role: "REQUESTER",
-      isActive: true,
+    expect(res.body).toEqual({
+      user: { id: requesterId, name: "Lab 3 Auth Requester", email: requesterEmail, role: "REQUESTER" },
       mustChangePassword: false,
     });
   });
@@ -170,7 +166,8 @@ describe("Lab 3 Authentication API", () => {
       });
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe("EMAIL_AND_PASSWORD_REQUIRED");
+    expect(res.body.error).toBe("VALIDATION_FAILED");
+    expect(res.body.fields.password).toEqual(expect.any(String));
   });
 
   // -------------------------------------------------------------------------
@@ -200,11 +197,11 @@ describe("Lab 3 Authentication API", () => {
 
     expect(meRes.status).toBe(200);
 
-    expect(meRes.body.user).toMatchObject({
+    expect(meRes.body).toEqual({
       id: requesterId,
+      name: "Lab 3 Auth Requester",
       email: requesterEmail,
       role: "REQUESTER",
-      isActive: true,
       mustChangePassword: false,
     });
   });
@@ -272,8 +269,8 @@ describe("Lab 3 Authentication API", () => {
       .post("/api/auth/logout")
       .set("Origin", "http://localhost:5173");
 
-    expect(logoutRes.status).toBe(200);
-    expect(logoutRes.body.success).toBe(true);
+    expect(logoutRes.status).toBe(204);
+    expect(logoutRes.text).toBe("");
 
     const afterLogout = await agent.get("/api/auth/me");
 
@@ -349,37 +346,13 @@ describe("Lab 3 Authentication API", () => {
       .post("/api/auth/logout")
       .set("Origin", "http://localhost:5173");
 
-    expect(res.status).toBe(200);
-    expect(res.body.success).toBe(true);
+    expect(res.status).toBe(204);
+    expect(res.text).toBe("");
   });
 
   // -------------------------------------------------------------------------
   // Change password
   // -------------------------------------------------------------------------
-
-  it("rejects change-password when the current password is wrong", async () => {
-    const agent = request.agent(app);
-
-    const loginRes = await agent
-      .post("/api/auth/login")
-      .send({
-        email: requesterEmail,
-        password,
-      });
-
-    expect(loginRes.status).toBe(200);
-
-    const res = await agent
-      .post("/api/auth/change-password")
-      .set("Origin", "http://localhost:5173")
-      .send({
-        currentPassword: "WrongPassword1!",
-        newPassword,
-      });
-
-    expect(res.status).toBe(400);
-    expect(res.body.error).toBe("CURRENT_PASSWORD_INCORRECT");
-  });
 
   it("rejects a new password that does not meet the password policy", async () => {
     const agent = request.agent(app);
@@ -397,8 +370,8 @@ describe("Lab 3 Authentication API", () => {
       .post("/api/auth/change-password")
       .set("Origin", "http://localhost:5173")
       .send({
-        currentPassword: password,
         newPassword: "short",
+        confirmPassword: "short",
       });
 
     expect(res.status).toBe(400);
@@ -421,8 +394,8 @@ describe("Lab 3 Authentication API", () => {
       .post("/api/auth/change-password")
       .set("Origin", "http://localhost:5173")
       .send({
-        currentPassword: password,
         newPassword: password,
+        confirmPassword: password,
       });
 
     expect(res.status).toBe(400);
@@ -456,12 +429,12 @@ describe("Lab 3 Authentication API", () => {
       .post("/api/auth/change-password")
       .set("Origin", "http://localhost:5173")
       .send({
-        currentPassword: password,
         newPassword,
+        confirmPassword: newPassword,
       });
 
     expect(changeRes.status).toBe(200);
-    expect(changeRes.body.success).toBe(true);
+    expect(changeRes.body).toEqual({ id: requesterId, name: "Lab 3 Auth Requester", email: requesterEmail, role: "REQUESTER", mustChangePassword: false });
 
     const updatedUser = await prisma.user.findUnique({
       where: {
@@ -504,7 +477,7 @@ expect(invalidatedSessions.length).toBeGreaterThanOrEqual(1);
     const otherSession = await agentB.get("/api/auth/me");
 
     expect(currentSession.status).toBe(200);
-    expect(currentSession.body.user.mustChangePassword).toBe(false);
+    expect(currentSession.body.mustChangePassword).toBe(false);
 
     expect(otherSession.status).toBe(401);
     expect(otherSession.body.error).toBe("UNAUTHENTICATED");
@@ -566,14 +539,14 @@ expect(invalidatedSessions.length).toBeGreaterThanOrEqual(1);
         });
 
       expect(loginRes.status).toBe(200);
-      expect(loginRes.body.user.mustChangePassword).toBe(true);
+      expect(loginRes.body.mustChangePassword).toBe(true);
 
       // /me must remain available so the client can determine the
       // authenticated user's role and password-change requirement.
       const meRes = await agent.get("/api/auth/me");
 
       expect(meRes.status).toBe(200);
-      expect(meRes.body.user.mustChangePassword).toBe(true);
+      expect(meRes.body.mustChangePassword).toBe(true);
 
       // Normal application routes are blocked until the initial
       // password has been changed.
@@ -589,12 +562,12 @@ expect(invalidatedSessions.length).toBeGreaterThanOrEqual(1);
   .post("/api/auth/change-password")
   .set("Origin", "http://localhost:5173")
   .send({
-    currentPassword: initialPassword,
     newPassword: changedPassword,
+    confirmPassword: changedPassword,
   });
 
       expect(changeRes.status).toBe(200);
-      expect(changeRes.body.success).toBe(true);
+      expect(changeRes.body).toEqual({ id: user.id, name: user.name, email, role: "REQUESTER", mustChangePassword: false });
 
       // BR-08: the current Session remains authenticated after the
       // successful mandatory password change.
@@ -602,7 +575,7 @@ expect(invalidatedSessions.length).toBeGreaterThanOrEqual(1);
 
       expect(currentSessionRes.status).toBe(200);
       expect(
-        currentSessionRes.body.user.mustChangePassword
+        currentSessionRes.body.mustChangePassword
       ).toBe(false);
 
       const updatedUser = await prisma.user.findUnique({

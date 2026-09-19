@@ -22,7 +22,11 @@ export function adminClientFixture(user: AuthUser | null = administrator) {
   });
   const edit = vi.fn(async (id: number, body: Record<string, unknown>) => json({ ...(id === 1 ? administrator : id === 3 ? inactive : person), ...body }));
   const reset = vi.fn(async (_id: number, _body: Record<string, unknown>) => new Response(null, { status: 204 }));
-  const me = vi.fn(async () => json({ user: state.user }, state.user ? 200 : 401));
+  const me = vi.fn(async () => {
+    if (!state.user) return json({ error: "UNAUTHENTICATED" }, 401);
+    const { id, name, email, role, mustChangePassword } = state.user;
+    return json({ id, name, email, role, mustChangePassword });
+  });
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input));
     const method = init?.method ?? "GET";

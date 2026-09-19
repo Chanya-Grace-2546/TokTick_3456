@@ -281,11 +281,11 @@ describe("Issue 7 Administrator User Management — API-26–32/34", () => {
     const agent = request.agent(app);
     const login = await agent.post("/api/auth/login").send({ email: stored.email, password: replacementPassword });
     expect(login.status).toBe(200);
-    expect(login.body.user.mustChangePassword).toBe(true);
+    expect(login.body.mustChangePassword).toBe(true);
     expect((await agent.get("/api/staff/owners")).body.error).toBe("PASSWORD_CHANGE_REQUIRED");
-    // Preserve the existing Issue 3 API shape; no auth refactor in Issue 7.
+    // Complete the documented mandatory-change flow using the current session.
     expect((await agent.post("/api/auth/change-password").set("Origin", origin)
-      .send({ currentPassword: replacementPassword, newPassword: "ChangedAgain!789" })).status).toBe(200);
+      .send({ newPassword: "ChangedAgain!789", confirmPassword: "ChangedAgain!789" })).status).toBe(200);
     expect((await agent.get("/api/staff/owners")).status).toBe(200);
     expect((await request(app).get("/api/auth/me").set("Cookie", fixture.adminCookie)).status).toBe(200);
   });

@@ -57,28 +57,16 @@ function renderScreen() {
 }
 
 async function fillForm(
-  currentPassword = "ChangeMe1!",
   newPassword = "NewPassword1!",
   confirmPassword = "NewPassword1!"
 ) {
   await waitFor(() => {
     expect(
       screen.getByLabelText(
-        /current password/i
+        /^new password/i
       )
     ).toBeInTheDocument();
   });
-
-  fireEvent.change(
-    screen.getByLabelText(
-      /current password/i
-    ),
-    {
-      target: {
-        value: currentPassword,
-      },
-    }
-  );
 
   fireEvent.change(
     screen.getByLabelText(
@@ -139,7 +127,6 @@ describe("ChangePassword", () => {
     renderScreen();
 
     await fillForm(
-      "ChangeMe1!",
       "NewPassword1!",
       "DifferentPassword1!"
     );
@@ -159,34 +146,6 @@ describe("ChangePassword", () => {
     expect(changeSpy).not.toHaveBeenCalled();
   });
 
-  it("shows an error when the current password is incorrect", async () => {
-    vi.spyOn(
-      api,
-      "changePassword"
-    ).mockRejectedValue(
-      new Error(
-        "CURRENT_PASSWORD_INCORRECT"
-      )
-    );
-
-    renderScreen();
-    await fillForm();
-
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: /change password/i,
-      })
-    );
-
-    await waitFor(() => {
-      expect(
-        screen.getByRole("alert")
-      ).toHaveTextContent(
-        /current password is incorrect/i
-      );
-    });
-  });
-
   it("shows an error when the new password reuses the current password", async () => {
     vi.spyOn(
       api,
@@ -200,7 +159,6 @@ describe("ChangePassword", () => {
     renderScreen();
 
     await fillForm(
-      "ChangeMe1!",
       "ChangeMe1!",
       "ChangeMe1!"
     );
@@ -233,7 +191,6 @@ describe("ChangePassword", () => {
     renderScreen();
 
     await fillForm(
-      "ChangeMe1!",
       "weakpassword",
       "weakpassword"
     );
@@ -279,7 +236,7 @@ describe("ChangePassword", () => {
 
     await waitFor(() => {
       expect(changeSpy).toHaveBeenCalledWith(
-        "ChangeMe1!",
+        "NewPassword1!",
         "NewPassword1!"
       );
     });

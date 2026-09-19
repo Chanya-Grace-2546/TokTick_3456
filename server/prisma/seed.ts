@@ -247,18 +247,8 @@ async function main() {
     where: {
       ticketNumber: "TKT-2026-000001",
     },
-    update: {
-      requesterId: jennifer.id,
-      ownerId: alex.id,
-      categoryId: accountCategory.id,
-      relatedSystemId: emailSystem.id,
-      summary: "Unable to access university email",
-      description:
-        "Requester receives an authentication error when opening university email.",
-      requestedPriority: Priority.HIGH,
-      itPriority: Priority.HIGH,
-      status: TicketStatus.IN_PROGRESS,
-    },
+    // Preserve any existing historical/submitted Ticket with this number.
+    update: {},
     create: {
       ticketNumber: "TKT-2026-000001",
       requesterId: jennifer.id,
@@ -278,18 +268,8 @@ async function main() {
     where: {
       ticketNumber: "TKT-2026-000002",
     },
-    update: {
-      requesterId: michael.id,
-      ownerId: null,
-      categoryId: networkCategory.id,
-      relatedSystemId: wifiSystem.id,
-      summary: "Campus Wi-Fi disconnects frequently",
-      description:
-        "Wi-Fi disconnects several times while the requester is working on campus.",
-      requestedPriority: Priority.MEDIUM,
-      itPriority: Priority.MEDIUM,
-      status: TicketStatus.NEW,
-    },
+    // Preserve any existing historical/submitted Ticket with this number.
+    update: {},
     create: {
       ticketNumber: "TKT-2026-000002",
       requesterId: michael.id,
@@ -309,18 +289,8 @@ async function main() {
     where: {
       ticketNumber: "TKT-2026-000003",
     },
-    update: {
-      requesterId: sarah.id,
-      ownerId: priya.id,
-      categoryId: softwareCategory.id,
-      relatedSystemId: vpnSystem.id,
-      summary: "VPN connection fails off campus",
-      description:
-        "Requester cannot establish a VPN connection from an off-campus network.",
-      requestedPriority: Priority.HIGH,
-      itPriority: Priority.HIGH,
-      status: TicketStatus.WAITING_FOR_REQUESTER,
-    },
+    // Preserve any existing historical/submitted Ticket with this number.
+    update: {},
     create: {
       ticketNumber: "TKT-2026-000003",
       requesterId: sarah.id,
@@ -340,18 +310,8 @@ async function main() {
     where: {
       ticketNumber: "TKT-2026-000004",
     },
-    update: {
-      requesterId: david.id,
-      ownerId: daniel.id,
-      categoryId: hardwareCategory.id,
-      relatedSystemId: laptopSystem.id,
-      summary: "Laptop battery drains quickly",
-      description:
-        "The assigned laptop loses most of its charge within a short period of normal use.",
-      requestedPriority: Priority.LOW,
-      itPriority: Priority.MEDIUM,
-      status: TicketStatus.RESOLVED,
-    },
+    // Preserve any existing historical/submitted Ticket with this number.
+    update: {},
     create: {
       ticketNumber: "TKT-2026-000004",
       requesterId: david.id,
@@ -440,7 +400,6 @@ async function main() {
 
   console.log("Lab 3 seed complete.");
   console.log("");
-  console.log("Local development initial password: ChangeMe1!");
   console.log("All seeded users require a password change at first login.");
 }
 

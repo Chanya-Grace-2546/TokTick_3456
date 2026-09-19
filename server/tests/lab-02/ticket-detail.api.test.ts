@@ -155,7 +155,7 @@ describe("Ticket Detail API", () => {
       );
 
       expect(res.status).toBe(404);
-      expect(res.body.error).toBe("TICKET_NOT_FOUND");
+      expect(res.body.error).toBe("NOT_FOUND");
     });
 
     // Lab 3 security regression:
@@ -166,7 +166,7 @@ describe("Ticket Detail API", () => {
       );
 
       expect(res.status).toBe(404);
-      expect(res.body.error).toBe("TICKET_NOT_FOUND");
+      expect(res.body.error).toBe("NOT_FOUND");
     });
   });
 });

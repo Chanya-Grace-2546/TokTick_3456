@@ -409,7 +409,7 @@ describe("Lab 3 Public Comments and Requester Resolution API", () => {
     expect(
       res.body.error
     ).toBe(
-      "TICKET_NOT_FOUND"
+      "NOT_FOUND"
     );
   });
 
@@ -688,7 +688,7 @@ describe("Lab 3 Public Comments and Requester Resolution API", () => {
     expect(
       res.body.error
     ).toBe(
-      "TICKET_NOT_FOUND"
+      "NOT_FOUND"
     );
   });
 
