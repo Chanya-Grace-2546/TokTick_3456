@@ -107,6 +107,7 @@ describe("MIG-01–04 populated historical migration and seed", () => {
     }, 65_000);
     it("MIG-04: rerunning seed does not duplicate Users/reference data/Tickets/Comments/Notes or reset credentials", () => {
       expect(afterSecondSeed).toEqual(afterFirstSeed);
+      expect(afterSecondSeed.tickets).toBeGreaterThan(10);
       expect(userIdentityAfterSecondSeed).toEqual(userIdentityAfterFirstSeed);
       for (const [role, active, minimum] of [["REQUESTER", true, 4], ["REQUESTER", false, 1], ["IT_STAFF", true, 3], ["IT_STAFF", false, 1], ["ADMINISTRATOR", true, 1]] as const) {
         expect(seededUsers.filter(user => user.role === role && user.isActive === active).length).toBeGreaterThanOrEqual(minimum);

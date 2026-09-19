@@ -1,6 +1,6 @@
 # TokTickIT
 
-TokTickIT is a ticket management system developed for Lab 2. The system allows requesters to select a requester profile, create tickets, view their tickets, view ticket details, and manage attachments.
+TokTickIT is a ticket management system developed through Lab 3. Users sign in with email and password. Requesters create and track their own tickets and attachments; IT Staff manage the shared queue, ownership, priority, status, comments, and internal notes; Administrators manage users. New accounts must change their initial password before using the application.
 
 ## Project Structure
 
@@ -52,6 +52,7 @@ Run Prisma migrations:
 ```bash
 cd server
 npm run prisma:migrate
+npm run prisma:seed
 ```
 
 Seed the database:
@@ -59,6 +60,24 @@ Seed the database:
 ```bash
 npm run prisma:seed
 ```
+
+## Local development accounts
+
+These are **local development/test credentials only**, created by `server/prisma/seed.ts`.
+Newly seeded accounts use initial password `ChangeMe1!` and require a password change on first login. Inactive accounts cannot sign in. Re-running the seed preserves existing passwords and password-change state.
+
+| Name | Email | Role | Active |
+|---|---|---|---|
+| Jennifer Anderson | jennifer.anderson@example.com | Requester | Yes |
+| Michael Brown | michael.brown@example.com | Requester | Yes |
+| Sarah Johnson | sarah.johnson@example.com | Requester | Yes |
+| David Lee | david.lee@example.com | Requester | Yes |
+| Retired Requester | retired.requester@example.com | Requester | No |
+| Alex Morgan | alex.morgan@toktickit.local | IT Staff | Yes |
+| Priya Shah | priya.shah@toktickit.local | IT Staff | Yes |
+| Daniel Kim | daniel.kim@toktickit.local | IT Staff | Yes |
+| Inactive IT Staff | inactive.staff@toktickit.local | IT Staff | No |
+| System Administrator | admin@toktickit.local | Administrator | Yes |
 
 ## Running the Application
 
@@ -100,7 +119,7 @@ npm test
 
 ## End-to-End (E2E) Testing
 
-The E2E tests use Playwright to verify the complete requester ticket flow, including visual and responsive inspection.
+The E2E tests use Playwright to verify authentication, requester regression, staff operations, and user administration across responsive viewports. Global setup prepares dedicated E2E accounts. Use a local migrated, seeded database.
 
 ### Install E2E Dependencies
 
@@ -150,24 +169,26 @@ The E2E tests run across multiple viewport sizes:
 * Tablet
 * Mobile
 
-The E2E flow verifies that a requester can:
+The E2E suite verifies:
 
-1. Select a development requester.
-2. Create a ticket.
-3. View the created ticket.
-4. Upload an attachment.
-5. Remove an attachment.
-6. Return to My Tickets and confirm that the ticket appears.
+1. Authentication, logout, and mandatory first-login password change.
+2. Requester ticket creation, detail, attachments, comments, and ownership protection.
+3. IT Staff queue pagination, ticket claim, priority and status changes, Public Comments, and Internal Notes.
+4. Administrator user management, password reset, and account safety rules.
+5. Responsive behavior across desktop, tablet, and mobile viewports.
 
 ## E2E Screenshots
 
 Screenshots generated during E2E testing are stored in:
 
 ```text
-artifacts/lab-02/screenshots/
-├── create-ticket/
-├── ticket-detail/
-└── my-tickets/
+artifacts/lab-03/screenshots/
+├── login/
+├── change-password/
+├── requester-ticket-detail/
+├── staff-queue/
+├── staff-ticket-detail/
+└── user-management/
 ```
 
 Each section contains screenshots for:
