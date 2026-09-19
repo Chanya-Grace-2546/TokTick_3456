@@ -12,9 +12,6 @@ export default function ChangePassword() {
   const { user, refreshUser } = useAuth();
   const navigate = useNavigate();
 
-  const [currentPassword, setCurrentPassword] =
-    useState("");
-
   const [newPassword, setNewPassword] =
     useState("");
 
@@ -45,8 +42,8 @@ export default function ChangePassword() {
 
     try {
       await changePassword(
-        currentPassword,
-        newPassword
+        newPassword,
+        confirmPassword
       );
 
       // BR-08:
@@ -64,11 +61,6 @@ export default function ChangePassword() {
           : "CHANGE_PASSWORD_FAILED";
 
       if (
-        code === "CURRENT_PASSWORD_INCORRECT" ||
-        code === "INVALID_CURRENT_PASSWORD"
-      ) {
-        setError("Current password is incorrect.");
-      } else if (
         code === "NEW_PASSWORD_MUST_BE_DIFFERENT" ||
         code === "PASSWORD_REUSE_NOT_ALLOWED"
       ) {
@@ -127,27 +119,6 @@ export default function ChangePassword() {
           )}
 
           <form onSubmit={handleSubmit}>
-            <div className="mb-3">
-              <label
-                htmlFor="currentPassword"
-                className="form-label"
-              >
-                Current Password
-              </label>
-
-              <input
-                id="currentPassword"
-                type="password"
-                className="form-control"
-                value={currentPassword}
-                onChange={(event) =>
-                  setCurrentPassword(event.target.value)
-                }
-                autoComplete="current-password"
-                required
-              />
-            </div>
-
             <div className="mb-2">
               <label
                 htmlFor="newPassword"

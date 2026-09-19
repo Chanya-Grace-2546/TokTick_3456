@@ -409,7 +409,7 @@ describe("Lab 3 Requester Regression API", () => {
     expect(
       res.body.error
     ).toBe(
-      "TICKET_NOT_FOUND"
+      "NOT_FOUND"
     );
   });
 
@@ -429,7 +429,7 @@ describe("Lab 3 Requester Regression API", () => {
     expect(
       res.body.error
     ).toBe(
-      "TICKET_NOT_FOUND"
+      "NOT_FOUND"
     );
   });
 
@@ -535,7 +535,7 @@ describe("Lab 3 Requester Regression API", () => {
     expect(
       res.body.error
     ).toBe(
-      "TICKET_NOT_FOUND"
+      "NOT_FOUND"
     );
   });
 

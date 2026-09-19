@@ -61,7 +61,8 @@ export async function checkSystem(): Promise<SystemStatus> {
   }
 
   const categoriesRes = await fetch(
-    `${API_URL}/api/categories`
+    `${API_URL}/api/categories`,
+    { credentials: "include" }
   );
 
   if (!categoriesRes.ok) {
@@ -79,7 +80,8 @@ export async function checkSystem(): Promise<SystemStatus> {
 
 export async function fetchCategories(): Promise<Category[]> {
   const res = await fetch(
-    `${API_URL}/api/categories`
+    `${API_URL}/api/categories`,
+    { credentials: "include" }
   );
 
   if (!res.ok) {
@@ -99,7 +101,8 @@ export interface RelatedSystem {
 
 export async function fetchRelatedSystems(): Promise<RelatedSystem[]> {
   const res = await fetch(
-    `${API_URL}/api/related-systems`
+    `${API_URL}/api/related-systems`,
+    { credentials: "include" }
   );
 
   if (!res.ok) {
@@ -563,7 +566,9 @@ export async function login(
     );
   }
 
-  return body;
+  // A successful authentication guarantees an active account. Keep the
+  // client user model while reading only the documented authentication fields.
+  return { user: { ...body.user, isActive: true, mustChangePassword: body.mustChangePassword } };
 }
 
 export async function logout(): Promise<void> {
@@ -603,12 +608,12 @@ export async function getMe(): Promise<AuthUser | null> {
     );
   }
 
-  return body.user;
+  return { ...body, isActive: true };
 }
 
 export async function changePassword(
-  currentPassword: string,
-  newPassword: string
+  newPassword: string,
+  confirmPassword: string
 ): Promise<void> {
   const res = await fetch(
     `${API_URL}/api/auth/change-password`,
@@ -620,8 +625,8 @@ export async function changePassword(
           "application/json",
       },
       body: JSON.stringify({
-        currentPassword,
         newPassword,
+        confirmPassword,
       }),
     }
   );

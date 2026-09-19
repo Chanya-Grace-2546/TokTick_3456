@@ -74,7 +74,7 @@ app.get("/api/health", (_req: Request, res: Response) => {
 //   -> on failure, respond 500 with a safe message (no internal details)
 // TODO(Issue 4): implement the route here.
 // ---------------------------------------------------------------------------
-app.get("/api/categories", async (_req: Request, res: Response) => {
+app.get("/api/categories", requireAuth, requirePasswordChanged, async (_req: Request, res: Response) => {
   try {
     const categories = await getPrisma().category.findMany({
       orderBy: { id: "asc" },
@@ -103,14 +103,18 @@ app.get("/api/categories", async (_req: Request, res: Response) => {
 // Only the raw session token is placed in the HttpOnly cookie.
 // The database stores only the SHA-256 hash of that token.
 app.post("/api/auth/login", async (req: Request, res: Response) => {
-  const { email, password } = req.body as {
+  const { email, password } = (req.body ?? {}) as {
     email?: string;
     password?: string;
   };
 
-  if (!email?.trim() || !password) {
+  if (typeof email !== "string" || !email.trim() || typeof password !== "string" || !password) {
     res.status(400).json({
-      error: "EMAIL_AND_PASSWORD_REQUIRED",
+      error: "VALIDATION_FAILED",
+      fields: {
+        ...(typeof email !== "string" || !email.trim() ? { email: "Email is required." } : {}),
+        ...(typeof password !== "string" || !password ? { password: "Password is required." } : {}),
+      },
     });
     return;
   }
@@ -129,6 +133,7 @@ app.post("/api/auth/login", async (req: Request, res: Response) => {
     if (!user || !user.isActive) {
       res.status(401).json({
         error: "INVALID_CREDENTIALS",
+        message: "Email or password is incorrect, or the account is unavailable.",
       });
       return;
     }
@@ -141,6 +146,7 @@ app.post("/api/auth/login", async (req: Request, res: Response) => {
     if (!passwordMatches) {
       res.status(401).json({
         error: "INVALID_CREDENTIALS",
+        message: "Email or password is incorrect, or the account is unavailable.",
       });
       return;
     }
@@ -171,9 +177,8 @@ app.post("/api/auth/login", async (req: Request, res: Response) => {
         name: user.name,
         email: user.email,
         role: user.role,
-        isActive: user.isActive,
-        mustChangePassword: user.mustChangePassword,
       },
+      mustChangePassword: user.mustChangePassword,
     });
   } catch (error) {
     console.error("Login failed:", error);
@@ -213,9 +218,7 @@ app.post(
         path: "/",
       });
 
-      res.status(200).json({
-        success: true,
-      });
+      res.status(204).end();
     } catch (error) {
       console.error("Logout failed:", error);
 
@@ -232,14 +235,16 @@ app.get(
   "/api/auth/me",
   requireAuth,
   (req: AuthenticatedRequest, res: Response) => {
+    const { id, name, email, role, mustChangePassword } = req.authUser!;
     res.status(200).json({
-      user: req.authUser,
+      id, name, email, role, mustChangePassword,
     });
   }
 );
 
 // POST /api/auth/change-password
-// Verify the current password, enforce the Lab 3 password policy,
+// Mandatory change uses the authenticated session plus confirmed new password.
+// Enforce the Lab 3 password policy,
 // replace the password hash, clear mustChangePassword, and invalidate
 // every other Session while keeping the current Session authenticated.
 app.post(
@@ -247,14 +252,23 @@ app.post(
   requireAuth,
   requireSameOrigin,
   async (req: AuthenticatedRequest, res: Response) => {
-    const { currentPassword, newPassword } = req.body as {
-      currentPassword?: string;
+    const { newPassword, confirmPassword } = (req.body ?? {}) as {
       newPassword?: string;
+      confirmPassword?: string;
     };
 
-    if (!currentPassword || !newPassword) {
+    if (typeof newPassword !== "string" || !newPassword) {
       res.status(400).json({
-        error: "CURRENT_AND_NEW_PASSWORD_REQUIRED",
+        error: "VALIDATION_FAILED",
+        fields: { newPassword: "New password is required." },
+      });
+      return;
+    }
+
+    if (typeof confirmPassword !== "string" || confirmPassword !== newPassword) {
+      res.status(400).json({
+        error: "VALIDATION_FAILED",
+        fields: { confirmPassword: "Passwords must match." },
       });
       return;
     }
@@ -286,18 +300,6 @@ app.post(
       if (!user) {
         res.status(401).json({
           error: "UNAUTHENTICATED",
-        });
-        return;
-      }
-
-      const currentMatches = await bcrypt.compare(
-        currentPassword,
-        user.passwordHash
-      );
-
-      if (!currentMatches) {
-        res.status(400).json({
-          error: "CURRENT_PASSWORD_INCORRECT",
         });
         return;
       }
@@ -347,7 +349,11 @@ app.post(
       ]);
 
       res.status(200).json({
-        success: true,
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        mustChangePassword: false,
       });
     } catch (error) {
       console.error(
@@ -370,6 +376,8 @@ app.post(
 // ---------------------------------------------------------------------------
 app.get(
   "/api/related-systems",
+  requireAuth,
+  requirePasswordChanged,
   async (_req: Request, res: Response) => {
     try {
       const relatedSystems =
@@ -1481,7 +1489,7 @@ app.get(
       if (!ticket) {
         res.status(404).json({
           error:
-            "TICKET_NOT_FOUND",
+            "NOT_FOUND",
         });
         return;
       }
@@ -1615,7 +1623,7 @@ app.get(
       if (!ticket) {
         res.status(404).json({
           error:
-            "TICKET_NOT_FOUND",
+            "NOT_FOUND",
         });
         return;
       }
@@ -1752,7 +1760,7 @@ app.post(
       if (!ticket) {
         res.status(404).json({
           error:
-            "TICKET_NOT_FOUND",
+            "NOT_FOUND",
         });
         return;
       }
@@ -1881,7 +1889,7 @@ app.post(
       if (!ticket) {
         res.status(404).json({
           error:
-            "TICKET_NOT_FOUND",
+            "NOT_FOUND",
         });
         return;
       }
@@ -2205,7 +2213,7 @@ app.get(
       if (!ticket) {
         res.status(404).json({
           error:
-            "TICKET_NOT_FOUND",
+            "NOT_FOUND",
         });
         return;
       }
@@ -2340,7 +2348,7 @@ app.post(
           404,
           {
             error:
-              "TICKET_NOT_FOUND",
+              "NOT_FOUND",
           }
         );
         return;
@@ -2531,7 +2539,7 @@ app.get(
       ) {
         res.status(404).json({
           error:
-            "ATTACHMENT_NOT_FOUND",
+            "NOT_FOUND",
         });
         return;
       }
@@ -2657,7 +2665,7 @@ app.patch(
       ) {
         res.status(404).json({
           error:
-            "ATTACHMENT_NOT_FOUND",
+            "NOT_FOUND",
         });
         return;
       }

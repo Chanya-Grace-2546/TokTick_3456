@@ -44,6 +44,7 @@ describe("Lab 3 Issue 6 — Staff Ticket Detail & Operations", () => {
   let staffId: number;
   let administratorId: number;
   let requesterId: number;
+  let fixtureTicketId: number;
 
   const password = "Issue6Test1!";
   const staffEmail = "lab3.issue6.staff@example.com";
@@ -93,6 +94,16 @@ describe("Lab 3 Issue 6 — Staff Ticket Detail & Operations", () => {
     staffId = staffUser.id;
     administratorId = administratorUser.id;
     requesterId = requesterUser.id;
+
+    const category = await prisma.category.findUniqueOrThrow({ where: { name: "Hardware" } });
+    const system = await prisma.relatedSystem.findUniqueOrThrow({ where: { name: "Corporate Laptop" } });
+    const ticket = await prisma.ticket.create({ data: {
+      ticketNumber: "ISSUE6-ISOLATED-TICKET", requesterId,
+      categoryId: category.id, relatedSystemId: system.id,
+      summary: "Isolated operations fixture", description: "Owned only by this test suite.",
+      requestedPriority: "MEDIUM", itPriority: "MEDIUM", status: "NEW",
+    } });
+    fixtureTicketId = ticket.id;
 
     staff = await login(staffEmail, password);
     administrator = await login(administratorEmail, password);
@@ -147,6 +158,8 @@ describe("Lab 3 Issue 6 — Staff Ticket Detail & Operations", () => {
         },
       },
     });
+
+    if (fixtureTicketId) await prisma.ticket.delete({ where: { id: fixtureTicketId } });
 
     await prisma.user.deleteMany({
       where: {
