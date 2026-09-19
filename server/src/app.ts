@@ -32,6 +32,13 @@ import {
 const MAX_ACTIVE_ATTACHMENTS = 5;
 const MAX_COMMENT_LENGTH = 2000;
 
+// Route IDs must fit PostgreSQL Int and use decimal digits only.
+function parseDatabaseId(value: string): number | null {
+  if (!/^[0-9]+$/.test(value)) return null;
+  const id = Number(value);
+  return Number.isInteger(id) && id >= 1 && id <= 2147483647 ? id : null;
+}
+
 // getPrisma() is your lazy database handle. Call it INSIDE a route when you
 // need the DB (Issue 4).
 
@@ -88,7 +95,7 @@ app.get("/api/categories", requireAuth, requirePasswordChanged, async (_req: Req
     res.status(200).json(categories);
   } catch {
     res.status(500).json({
-      error: "Failed to load categories",
+      error: "UNEXPECTED_ERROR",
     });
   }
 });
@@ -371,8 +378,7 @@ app.post(
 // ---------------------------------------------------------------------------
 // Lab 2 Issue 3 — Ticket Database and Reference Data
 // GET /api/related-systems -> reference data for the Create Ticket dropdown
-// (FR-13). No active/inactive concept for RelatedSystem in Lab 2 — all rows
-// returned, matching how /api/categories already behaves.
+// (FR-13). Lab 3 returns active rows only, like /api/categories.
 // ---------------------------------------------------------------------------
 app.get(
   "/api/related-systems",
@@ -509,9 +515,9 @@ app.get(
   requirePasswordChanged,
   requireRole("IT_STAFF", "ADMINISTRATOR"),
   async (req: AuthenticatedRequest, res: Response) => {
-    const ticketId = Number(req.params.id);
+    const ticketId = parseDatabaseId(req.params.id);
 
-    if (!Number.isInteger(ticketId) || ticketId <= 0) {
+    if (ticketId === null) {
       res.status(400).json({
         error: "INVALID_TICKET_ID",
       });
@@ -661,9 +667,9 @@ app.post(
   requirePasswordChanged,
   requireRole("IT_STAFF", "ADMINISTRATOR"),
   async (req: AuthenticatedRequest, res: Response) => {
-    const ticketId = Number(req.params.id);
+    const ticketId = parseDatabaseId(req.params.id);
 
-    if (!Number.isInteger(ticketId) || ticketId <= 0) {
+    if (ticketId === null) {
       res.status(400).json({
         error: "INVALID_TICKET_ID",
       });
@@ -747,9 +753,9 @@ app.patch(
   requirePasswordChanged,
   requireRole("IT_STAFF", "ADMINISTRATOR"),
   async (req: AuthenticatedRequest, res: Response) => {
-    const ticketId = Number(req.params.id);
+    const ticketId = parseDatabaseId(req.params.id);
 
-    if (!Number.isInteger(ticketId) || ticketId <= 0) {
+    if (ticketId === null) {
       res.status(400).json({
         error: "INVALID_TICKET_ID",
       });
@@ -861,9 +867,9 @@ app.patch(
   requirePasswordChanged,
   requireRole("IT_STAFF", "ADMINISTRATOR"),
   async (req: AuthenticatedRequest, res: Response) => {
-    const ticketId = Number(req.params.id);
+    const ticketId = parseDatabaseId(req.params.id);
 
-    if (!Number.isInteger(ticketId) || ticketId <= 0) {
+    if (ticketId === null) {
       res.status(400).json({
         error: "INVALID_TICKET_ID",
       });
@@ -947,9 +953,9 @@ app.patch(
   requirePasswordChanged,
   requireRole("IT_STAFF", "ADMINISTRATOR"),
   async (req: AuthenticatedRequest, res: Response) => {
-    const ticketId = Number(req.params.id);
+    const ticketId = parseDatabaseId(req.params.id);
 
-    if (!Number.isInteger(ticketId) || ticketId <= 0) {
+    if (ticketId === null) {
       res.status(400).json({
         error: "INVALID_TICKET_ID",
       });
@@ -1432,15 +1438,13 @@ app.get(
     req: AuthenticatedRequest,
     res: Response
   ) => {
-    const ticketId = Number(
-      req.params.id
-    );
+    const ticketId = parseDatabaseId(req.params.id);
 
     const requesterId =
       req.authUser!.id;
 
     if (
-      Number.isNaN(ticketId)
+      ticketId === null
     ) {
       res.status(400).json({
         error:
@@ -1583,11 +1587,10 @@ app.get(
     req: AuthenticatedRequest,
     res: Response
   ) => {
-    const ticketId =
-      Number(req.params.id);
+    const ticketId = parseDatabaseId(req.params.id);
 
     if (
-      Number.isNaN(ticketId)
+      ticketId === null
     ) {
       res.status(400).json({
         error:
@@ -1688,11 +1691,10 @@ app.post(
     req: AuthenticatedRequest,
     res: Response
   ) => {
-    const ticketId =
-      Number(req.params.id);
+    const ticketId = parseDatabaseId(req.params.id);
 
     if (
-      Number.isNaN(ticketId)
+      ticketId === null
     ) {
       res.status(400).json({
         error:
@@ -1851,14 +1853,13 @@ app.post(
     req: AuthenticatedRequest,
     res: Response
   ) => {
-    const ticketId =
-      Number(req.params.id);
+    const ticketId = parseDatabaseId(req.params.id);
 
     const requesterId =
       req.authUser!.id;
 
     if (
-      Number.isNaN(ticketId)
+      ticketId === null
     ) {
       res.status(400).json({
         error:
@@ -1966,12 +1967,10 @@ app.get(
     req: AuthenticatedRequest,
     res: Response
   ) => {
-    const ticketId =
-      Number(req.params.id);
+    const ticketId = parseDatabaseId(req.params.id);
 
     if (
-      !Number.isInteger(ticketId) ||
-      ticketId <= 0
+      ticketId === null
     ) {
       res.status(400).json({
         error:
@@ -2060,12 +2059,10 @@ app.post(
     req: AuthenticatedRequest,
     res: Response
   ) => {
-    const ticketId =
-      Number(req.params.id);
+    const ticketId = parseDatabaseId(req.params.id);
 
     if (
-      !Number.isInteger(ticketId) ||
-      ticketId <= 0
+      ticketId === null
     ) {
       res.status(400).json({
         error:
@@ -2180,15 +2177,13 @@ app.get(
     req: AuthenticatedRequest,
     res: Response
   ) => {
-    const ticketId = Number(
-      req.params.id
-    );
+    const ticketId = parseDatabaseId(req.params.id);
 
     const requesterId =
       req.authUser!.id;
 
     if (
-      Number.isNaN(ticketId)
+      ticketId === null
     ) {
       res.status(400).json({
         error:
@@ -2282,9 +2277,7 @@ app.post(
     req: AuthenticatedRequest,
     res: Response
   ) => {
-    const ticketId = Number(
-      req.params.id
-    );
+    const ticketId = parseDatabaseId(req.params.id);
 
     const requesterId =
       req.authUser!.id;
@@ -2307,7 +2300,7 @@ app.post(
     }
 
     if (
-      Number.isNaN(ticketId)
+      ticketId === null
     ) {
       await cleanupAndRespond(
         400,
@@ -2485,16 +2478,13 @@ app.get(
     req: AuthenticatedRequest,
     res: Response
   ) => {
-    const attachmentId =
-      Number(req.params.id);
+    const attachmentId = parseDatabaseId(req.params.id);
 
     const user =
       req.authUser!;
 
     if (
-      Number.isNaN(
-        attachmentId
-      )
+      attachmentId === null
     ) {
       res.status(400).json({
         error:
@@ -2603,8 +2593,7 @@ app.patch(
     req: AuthenticatedRequest,
     res: Response
   ) => {
-    const attachmentId =
-      Number(req.params.id);
+    const attachmentId = parseDatabaseId(req.params.id);
 
     const requesterId =
       req.authUser!.id;
@@ -2615,9 +2604,7 @@ app.patch(
       };
 
     if (
-      Number.isNaN(
-        attachmentId
-      )
+      attachmentId === null
     ) {
       res.status(400).json({
         error:

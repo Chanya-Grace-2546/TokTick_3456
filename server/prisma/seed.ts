@@ -239,8 +239,9 @@ async function main() {
   //
   // These four initial development tickets use the same official
   // TKT-YYYY-NNNNNN format as application-created tickets. On a clean
-  // seeded database they occupy sequences 000001 through 000004, so the
-  // existing COUNT-based generator continues with 000005.
+  // seeded database they occupy sequences 000001 through 000004. The
+  // pagination examples below continue through 000011, so the existing
+  // COUNT-based generator continues with 000012 on a clean seed.
   // -------------------------------------------------------------------------
 
   const ticket1 = await prisma.ticket.upsert({
@@ -326,6 +327,22 @@ async function main() {
       status: TicketStatus.RESOLVED,
     },
   });
+
+  // Seven additional realistic examples make the default 10-row queue paginate.
+  // Empty updates preserve historical and subsequently edited Tickets.
+  const queueExamples = [
+    { requesterId: jennifer.id, ownerId: null, categoryId: hardwareCategory.id, relatedSystemId: laptopSystem.id, summary: "Laptop webcam unavailable in meetings", description: "The camera is not detected by meeting applications after restarting.", requestedPriority: Priority.MEDIUM, itPriority: Priority.MEDIUM, status: TicketStatus.NEW },
+    { requesterId: michael.id, ownerId: alex.id, categoryId: accountCategory.id, relatedSystemId: emailSystem.id, summary: "Shared mailbox access requested", description: "Please restore access to the department shared mailbox.", requestedPriority: Priority.LOW, itPriority: Priority.LOW, status: TicketStatus.OPEN },
+    { requesterId: sarah.id, ownerId: priya.id, categoryId: networkCategory.id, relatedSystemId: wifiSystem.id, summary: "Wi-Fi unavailable in seminar room", description: "Several laptops cannot connect during scheduled seminars.", requestedPriority: Priority.HIGH, itPriority: Priority.HIGH, status: TicketStatus.IN_PROGRESS },
+    { requesterId: david.id, ownerId: null, categoryId: softwareCategory.id, relatedSystemId: vpnSystem.id, summary: "VPN installer fails to launch", description: "The installer closes before the setup wizard appears.", requestedPriority: Priority.MEDIUM, itPriority: Priority.LOW, status: TicketStatus.WAITING_FOR_REQUESTER },
+    { requesterId: jennifer.id, ownerId: daniel.id, categoryId: hardwareCategory.id, relatedSystemId: laptopSystem.id, summary: "Laptop docking display restored", description: "External display now works after replacing the docking cable.", requestedPriority: Priority.MEDIUM, itPriority: Priority.MEDIUM, status: TicketStatus.CLOSED },
+    { requesterId: michael.id, ownerId: alex.id, categoryId: accountCategory.id, relatedSystemId: emailSystem.id, summary: "Email synchronization stopped again", description: "Messages stopped synchronizing after the initial repair.", requestedPriority: Priority.HIGH, itPriority: Priority.HIGH, status: TicketStatus.REOPENED },
+    { requesterId: sarah.id, ownerId: null, categoryId: softwareCategory.id, relatedSystemId: vpnSystem.id, summary: "Duplicate VPN setup request cancelled", description: "Requester confirmed this duplicates an existing support request.", requestedPriority: Priority.LOW, itPriority: Priority.LOW, status: TicketStatus.CANCELLED },
+  ];
+  for (const [index, data] of queueExamples.entries()) {
+    const ticketNumber = `TKT-2026-${String(index + 5).padStart(6, "0")}`;
+    await prisma.ticket.upsert({ where: { ticketNumber }, update: {}, create: { ticketNumber, ...data } });
+  }
 
   // -------------------------------------------------------------------------
   // Public Comments

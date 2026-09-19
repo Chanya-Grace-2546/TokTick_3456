@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import request from "supertest";
 import { randomBytes } from "node:crypto";
 import { app } from "../../src/app.js";
@@ -34,4 +34,22 @@ describe("API §3 / BR-07 reference-data gate", () => {
       expect(allowed.body.length).toBeGreaterThan(0);
     });
   }
+  it("related systems exclude inactive rows", async () => {
+    const inactive = await prisma.relatedSystem.create({ data: { name: "Retired system", isActive: false } });
+    const response = await request(app).get("/api/related-systems").set("Cookie", cookies["REQUESTER-false"]);
+    expect(response.status).toBe(200);
+    expect(response.body.some((row: { id: number }) => row.id === inactive.id)).toBe(false);
+  });
+
+  it("categories return the safe unexpected-error contract", async () => {
+    const spy = vi.spyOn(prisma.category, "findMany").mockRejectedValueOnce(new Error("private database failure"));
+    try {
+      const response = await request(app).get("/api/categories").set("Cookie", cookies["REQUESTER-false"]);
+      expect(response.status).toBe(500);
+      expect(response.body).toEqual({ error: "UNEXPECTED_ERROR" });
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
 });
