@@ -33,16 +33,6 @@ function Priorities({ ticket }: { ticket: StaffQueueItem }) {
   </div>;
 }
 
-function RequesterEmail({ email }: { email: string }) {
-  const domainStart = email.lastIndexOf("@") + 1;
-  // Prefer a break at the domain boundary; only unusually long parts need
-  // character wrapping. Both parts remain fully visible within the column.
-  const partStyle = { display: "inline-block", maxWidth: "100%", verticalAlign: "top" };
-  return <span>
-    <span style={partStyle}>{email.slice(0, domainStart)}</span><wbr />
-    <span style={partStyle}>{email.slice(domainStart)}</span>
-  </span>;
-}
 
 function Status({ status }: { status: StaffTicketStatus }) {
   return <span className="badge text-wrap text-start" style={{ backgroundColor: zenGreen.pale, color: zenGreen.primary }}>{label(status)}</span>;
@@ -220,14 +210,14 @@ export default function StaffTicketQueue() {
           <div className="d-none d-lg-block" style={panelStyle}>
             <table className="table align-middle mb-0" aria-label="Ticket Queue" style={{ tableLayout: "fixed", width: "100%" }}>
               <thead><tr>
-                <th scope="col" style={{ width: "14%" }}>Ticket Number</th>
-                <th scope="col" style={{ width: "18%" }}>Requester</th>
-                <th scope="col" style={{ width: "12%" }}>Updated</th>
-                <th scope="col" style={{ width: "18%" }}>Summary</th>
-                <th scope="col" style={{ width: "10%" }}>Requested Priority</th>
-                <th scope="col" style={{ width: "8%" }}>IT Priority</th>
-                <th scope="col" style={{ width: "12%" }}>Status</th>
-                <th scope="col" style={{ width: "8%" }}>Owner</th>
+<th scope="col" style={{ width: "14%" }}>Ticket Number</th>
+<th scope="col" style={{ width: "14%" }}>Requester</th>
+<th scope="col" style={{ width: "13%" }}>Updated</th>
+<th scope="col" style={{ width: "19%" }}>Summary</th>
+<th scope="col" style={{ width: "10%" }}>Requested Priority</th>
+<th scope="col" style={{ width: "8%" }}>IT Priority</th>
+<th scope="col" style={{ width: "12%" }}>Status</th>
+<th scope="col" style={{ width: "10%" }}>Owner</th>
               </tr></thead>
               <tbody>{data.items.map(ticket => <tr
                 key={ticket.id}
@@ -243,13 +233,16 @@ export default function StaffTicketQueue() {
                   }
                 }}
               >
-                <td className="fw-semibold">{ticket.ticketNumber}</td>
-                <td><div>{ticket.requester.name}</div><div className="small text-muted"><RequesterEmail email={ticket.requester.email} /></div></td>
+               <td className="fw-semibold text-nowrap">{ticket.ticketNumber}</td>
+                <td>{ticket.requester.name}</td>
                 <td className="small"><Updated date={ticket.updatedAt} /></td>
                 <td>{ticket.summary}<div className="small text-muted">{ticket.category.name}</div></td>
                 <td><PriorityBadge priority={ticket.requestedPriority} /></td>
                 <td><PriorityBadge priority={ticket.itPriority} /></td>
-                <td><Status status={ticket.status} /></td><td>{ticket.owner?.name ?? "Unassigned"}</td>
+                <td><Status status={ticket.status} /></td>
+<td style={{ overflowWrap: "normal", wordBreak: "normal" }}>
+  {ticket.owner?.name ?? "Unassigned"}
+</td>
               </tr>)}</tbody>
             </table>
           </div>
@@ -320,9 +313,6 @@ export default function StaffTicketQueue() {
               Requester
             </div>
             <div>{ticket.requester.name}</div>
-            <div className="small text-muted">
-              <RequesterEmail email={ticket.requester.email} />
-            </div>
           </div>
 
           <div className="col-6">
