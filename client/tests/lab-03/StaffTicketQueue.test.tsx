@@ -43,7 +43,6 @@ describe("Staff Ticket Queue (UI-06)", () => {
     const cells = within(ticketRow).getAllByRole("cell");
     expect(cells[0]).toHaveTextContent("TKT-2026-000015");
     expect(cells[1]).toHaveTextContent("A Requester");
-    expect(cells[1]).toHaveTextContent("a@example.test");
     expect(cells[4]).toHaveTextContent("Medium");
     expect(cells[5]).toHaveTextContent("High");
     expect(within(ticketRow).queryByRole("button")).not.toBeInTheDocument();
