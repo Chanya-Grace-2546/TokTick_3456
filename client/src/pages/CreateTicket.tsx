@@ -13,7 +13,7 @@ import {
   FieldErrors,
   Ticket,
 } from "../api.js";
-import { useRequester } from "../context/RequesterContext.js";
+import { useAuth } from "../context/AuthContext.js";
 import { zenGreen } from "../theme.js";
 
 type ReferenceDataState = "loading" | "error" | "ready";
@@ -39,8 +39,9 @@ function isAllowedFile(file: File): boolean {
 // Flow: create the Ticket first, then upload any selected files to it.
 // If a file upload fails, the Ticket is still saved (BR-21) — failures are
 // reported so the Requester can retry from Ticket Detail instead.
+// Lab 3 — Requester identity now comes from the authenticated Session.
 export default function CreateTicket() {
-  const { requester } = useRequester();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -92,21 +93,30 @@ export default function CreateTicket() {
     }
 
     const invalid = incoming.find((f) => !isAllowedFile(f));
+
     if (invalid) {
-      setFileError(`"${invalid.name}" isn't an allowed type (JPG, PNG, WEBP, or PDF only).`);
+      setFileError(
+        `"${invalid.name}" isn't an allowed type (JPG, PNG, WEBP, or PDF only).`
+      );
+
       if (fileInputRef.current) fileInputRef.current.value = "";
       return;
     }
 
     const tooLarge = incoming.find((f) => f.size > MAX_FILE_SIZE);
+
     if (tooLarge) {
       setFileError(`"${tooLarge.name}" is too large — 5MB maximum.`);
+
       if (fileInputRef.current) fileInputRef.current.value = "";
       return;
     }
 
     setSelectedFiles((prev) => [...prev, ...incoming]);
-    if (fileInputRef.current) fileInputRef.current.value = "";
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
   }
 
   function removeSelectedFile(index: number) {
@@ -115,7 +125,6 @@ export default function CreateTicket() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!requester) return;
 
     setFieldErrors({});
     setSubmitErrorMessage("");
@@ -123,7 +132,6 @@ export default function CreateTicket() {
 
     try {
       const ticket = await createTicket({
-        requesterId: requester.id,
         categoryId: Number(categoryId),
         relatedSystemId: Number(relatedSystemId),
         summary,
@@ -134,12 +142,16 @@ export default function CreateTicket() {
       // BR-21: Ticket is already saved at this point. Attachment upload
       // failures below are reported but never roll back the Ticket.
       const failures: string[] = [];
+
       for (const file of selectedFiles) {
         try {
-          await uploadAttachment(ticket.id, requester.id, file);
+          await uploadAttachment(ticket.id, file);
         } catch (err) {
           failures.push(
-            file.name + (err instanceof AttachmentUploadError ? ` (${err.code})` : "")
+            file.name +
+              (err instanceof AttachmentUploadError
+                ? ` (${err.code})`
+                : "")
           );
         }
       }
@@ -154,7 +166,9 @@ export default function CreateTicket() {
         setSubmitState("idle");
       } else {
         setSubmitErrorMessage(
-          err instanceof Error ? err.message : "Something went wrong. Please try again."
+          err instanceof Error
+            ? err.message
+            : "Something went wrong. Please try again."
         );
         setSubmitState("error");
       }
@@ -164,33 +178,56 @@ export default function CreateTicket() {
   if (submitState === "success" && createdTicket) {
     return (
       <div className="container py-5" style={{ maxWidth: 720 }}>
-        <div className="p-4" style={{ ...cardStyle, borderLeft: `4px solid ${zenGreen.secondary}` }}>
+        <div
+          className="p-4"
+          style={{
+            ...cardStyle,
+            borderLeft: `4px solid ${zenGreen.secondary}`,
+          }}
+        >
           <h2 className="h5" style={{ color: zenGreen.text }}>
             Ticket submitted
           </h2>
+
           <p className="mb-1">
             Your official Ticket Number is{" "}
-            <strong style={{ color: zenGreen.primary }}>{createdTicket.ticketNumber}</strong>.
+            <strong style={{ color: zenGreen.primary }}>
+              {createdTicket.ticketNumber}
+            </strong>
+            .
           </p>
-          <p className="mb-1">Ticket Date: {new Date(createdTicket.createdAt).toLocaleString()}</p>
-          <p className="mb-3">Requester: {requester?.name}</p>
+
+          <p className="mb-1">
+            Ticket Date:{" "}
+            {new Date(createdTicket.createdAt).toLocaleString()}
+          </p>
+
+          <p className="mb-3">
+            Requester: {user?.name}
+          </p>
 
           {attachmentFailures.length > 0 && (
             <div className="alert alert-warning small">
-              Ticket was saved, but {attachmentFailures.length} attachment(s) failed to upload:{" "}
-              {attachmentFailures.join(", ")}. You can retry adding them from the ticket's detail
-              page.
+              Ticket was saved, but {attachmentFailures.length} attachment(s)
+              failed to upload: {attachmentFailures.join(", ")}. You can retry
+              adding them from the ticket's detail page.
             </div>
           )}
 
           <div className="d-flex gap-2">
             <button
               className="btn btn-sm"
-              style={{ backgroundColor: zenGreen.primary, color: "white" }}
-              onClick={() => navigate(`/tickets/${createdTicket.id}`)}
+              style={{
+                backgroundColor: zenGreen.primary,
+                color: "white",
+              }}
+              onClick={() =>
+                navigate(`/tickets/${createdTicket.id}`)
+              }
             >
               View Ticket
             </button>
+
             <button
               className="btn btn-sm btn-outline-secondary"
               onClick={() => navigate("/tickets")}
@@ -209,7 +246,10 @@ export default function CreateTicket() {
         Create Ticket
       </h1>
 
-      {refState === "loading" && <p role="status">Loading form…</p>}
+      {refState === "loading" && (
+        <p role="status">Loading form…</p>
+      )}
+
       {refState === "error" && (
         <p role="alert" className="text-danger">
           Couldn't load Categories or Related Systems. Please try again.
@@ -221,19 +261,39 @@ export default function CreateTicket() {
           <form onSubmit={handleSubmit} noValidate>
             <div
               className="row g-3 mb-4 p-3"
-              style={{ backgroundColor: zenGreen.readOnlyBg, borderRadius: 6 }}
+              style={{
+                backgroundColor: zenGreen.readOnlyBg,
+                borderRadius: 6,
+              }}
             >
               <div className="col-12 col-md-6 col-lg-4">
-                <label className="form-label text-muted small mb-1">Ticket Number</label>
-                <div className="form-control-plaintext">Assigned after submission</div>
+                <label className="form-label text-muted small mb-1">
+                  Ticket Number
+                </label>
+
+                <div className="form-control-plaintext">
+                  Assigned after submission
+                </div>
               </div>
+
               <div className="col-12 col-md-6 col-lg-4">
-                <label className="form-label text-muted small mb-1">Ticket Date</label>
-                <div className="form-control-plaintext">{new Date().toLocaleDateString()}</div>
+                <label className="form-label text-muted small mb-1">
+                  Ticket Date
+                </label>
+
+                <div className="form-control-plaintext">
+                  {new Date().toLocaleDateString()}
+                </div>
               </div>
+
               <div className="col-12 col-md-6 col-lg-4">
-                <label className="form-label text-muted small mb-1">Requester</label>
-                <div className="form-control-plaintext">{requester?.name}</div>
+                <label className="form-label text-muted small mb-1">
+                  Requester
+                </label>
+
+                <div className="form-control-plaintext">
+                  {user?.name}
+                </div>
               </div>
             </div>
 
@@ -242,69 +302,105 @@ export default function CreateTicket() {
                 <label className="form-label" htmlFor="category">
                   Category <span className="text-danger">*</span>
                 </label>
+
                 <select
                   id="category"
-                  className={`form-select ${fieldErrors.categoryId ? "is-invalid" : ""}`}
+                  className={`form-select ${
+                    fieldErrors.categoryId ? "is-invalid" : ""
+                  }`}
                   value={categoryId}
                   onChange={(e) => setCategoryId(e.target.value)}
                 >
                   <option value="" disabled>
                     Select…
                   </option>
+
                   {categories.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
                     </option>
                   ))}
                 </select>
+
                 {fieldErrors.categoryId && (
-                  <div className="invalid-feedback d-block">{fieldErrors.categoryId}</div>
+                  <div className="invalid-feedback d-block">
+                    {fieldErrors.categoryId}
+                  </div>
                 )}
               </div>
 
               <div className="col-12 col-md-6 col-lg-4">
-                <label className="form-label" htmlFor="relatedSystem">
+                <label
+                  className="form-label"
+                  htmlFor="relatedSystem"
+                >
                   Related System <span className="text-danger">*</span>
                 </label>
+
                 <select
                   id="relatedSystem"
-                  className={`form-select ${fieldErrors.relatedSystemId ? "is-invalid" : ""}`}
+                  className={`form-select ${
+                    fieldErrors.relatedSystemId ? "is-invalid" : ""
+                  }`}
                   value={relatedSystemId}
-                  onChange={(e) => setRelatedSystemId(e.target.value)}
+                  onChange={(e) =>
+                    setRelatedSystemId(e.target.value)
+                  }
                 >
                   <option value="" disabled>
                     Select…
                   </option>
+
                   {relatedSystems.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.name}
                     </option>
                   ))}
                 </select>
+
                 {fieldErrors.relatedSystemId && (
-                  <div className="invalid-feedback d-block">{fieldErrors.relatedSystemId}</div>
+                  <div className="invalid-feedback d-block">
+                    {fieldErrors.relatedSystemId}
+                  </div>
                 )}
               </div>
 
               <div className="col-12 col-md-6 col-lg-4">
-                <label className="form-label" htmlFor="requestedPriority">
-                  Requested Priority <span className="text-danger">*</span>
+                <label
+                  className="form-label"
+                  htmlFor="requestedPriority"
+                >
+                  Requested Priority{" "}
+                  <span className="text-danger">*</span>
                 </label>
+
                 <select
                   id="requestedPriority"
-                  className={`form-select ${fieldErrors.requestedPriority ? "is-invalid" : ""}`}
+                  className={`form-select ${
+                    fieldErrors.requestedPriority
+                      ? "is-invalid"
+                      : ""
+                  }`}
                   value={requestedPriority}
-                  onChange={(e) => setRequestedPriority(e.target.value as Priority)}
+                  onChange={(e) =>
+                    setRequestedPriority(
+                      e.target.value as Priority
+                    )
+                  }
                 >
                   <option value="" disabled>
                     Select…
                   </option>
+
                   <option value="LOW">Low</option>
                   <option value="MEDIUM">Medium</option>
                   <option value="HIGH">High</option>
                 </select>
+
                 {fieldErrors.requestedPriority && (
-                  <div className="invalid-feedback d-block">{fieldErrors.requestedPriority}</div>
+                  <div className="invalid-feedback d-block">
+                    {fieldErrors.requestedPriority}
+                  </div>
                 )}
               </div>
             </div>
@@ -313,16 +409,22 @@ export default function CreateTicket() {
               <label className="form-label" htmlFor="summary">
                 Summary <span className="text-danger">*</span>
               </label>
+
               <input
                 id="summary"
                 type="text"
-                className={`form-control ${fieldErrors.summary ? "is-invalid" : ""}`}
+                className={`form-control ${
+                  fieldErrors.summary ? "is-invalid" : ""
+                }`}
                 value={summary}
                 onChange={(e) => setSummary(e.target.value)}
                 maxLength={120}
               />
+
               {fieldErrors.summary && (
-                <div className="invalid-feedback d-block">{fieldErrors.summary}</div>
+                <div className="invalid-feedback d-block">
+                  {fieldErrors.summary}
+                </div>
               )}
             </div>
 
@@ -330,23 +432,34 @@ export default function CreateTicket() {
               <label className="form-label" htmlFor="description">
                 Description <span className="text-danger">*</span>
               </label>
+
               <textarea
                 id="description"
-                className={`form-control ${fieldErrors.description ? "is-invalid" : ""}`}
+                className={`form-control ${
+                  fieldErrors.description ? "is-invalid" : ""
+                }`}
                 rows={5}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 maxLength={2000}
               />
+
               {fieldErrors.description && (
-                <div className="invalid-feedback d-block">{fieldErrors.description}</div>
+                <div className="invalid-feedback d-block">
+                  {fieldErrors.description}
+                </div>
               )}
             </div>
 
             <div className="mb-4">
-              <label className="form-label" htmlFor="attachments">
-                Attachments (optional, up to {MAX_FILES}, JPG/PNG/WEBP/PDF, 5MB each)
+              <label
+                className="form-label"
+                htmlFor="attachments"
+              >
+                Attachments (optional, up to {MAX_FILES},
+                JPG/PNG/WEBP/PDF, 5MB each)
               </label>
+
               <input
                 ref={fileInputRef}
                 id="attachments"
@@ -357,7 +470,12 @@ export default function CreateTicket() {
                 onChange={handleFilesSelected}
                 disabled={selectedFiles.length >= MAX_FILES}
               />
-              {fileError && <div className="text-danger small mt-1">{fileError}</div>}
+
+              {fileError && (
+                <div className="text-danger small mt-1">
+                  {fileError}
+                </div>
+              )}
 
               {selectedFiles.length > 0 && (
                 <ul className="list-group mt-2">
@@ -367,8 +485,12 @@ export default function CreateTicket() {
                       className="list-group-item d-flex justify-content-between align-items-center py-1"
                     >
                       <span className="small">
-                        {f.name} <span className="text-muted">({(f.size / 1024).toFixed(0)} KB)</span>
+                        {f.name}{" "}
+                        <span className="text-muted">
+                          ({(f.size / 1024).toFixed(0)} KB)
+                        </span>
                       </span>
+
                       <button
                         type="button"
                         className="btn btn-sm btn-outline-danger py-0"
@@ -391,10 +513,15 @@ export default function CreateTicket() {
             <button
               type="submit"
               className="btn"
-              style={{ backgroundColor: zenGreen.primary, color: "white" }}
+              style={{
+                backgroundColor: zenGreen.primary,
+                color: "white",
+              }}
               disabled={submitState === "submitting"}
             >
-              {submitState === "submitting" ? "Submitting…" : "Submit Ticket"}
+              {submitState === "submitting"
+                ? "Submitting…"
+                : "Submit Ticket"}
             </button>
           </form>
         </div>
