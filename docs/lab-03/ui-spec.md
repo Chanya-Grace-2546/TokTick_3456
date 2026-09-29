@@ -187,13 +187,13 @@ Same Lab 2 requirements plus:
 
 ## 12. Required Visual Evidence Checklist
 For Login, Change Password, Requester Ticket Detail additions, Staff Queue, Staff Ticket Detail, and User Management capture desktop/tablet/mobile as applicable and verify:
-- [ ] Zen Green tokens/components are consistent with Lab 2.
-- [ ] Role navigation is correct; unauthorized destinations are absent.
-- [ ] Current User name + role are visible after normal authentication.
-- [ ] Requested Priority/read-only Requester fields are visually distinct from editable staff controls.
-- [ ] Public Comments and Internal Notes are unmistakably different and labelled by audience.
-- [ ] Status/priority/role/account badges contain readable text.
-- [ ] Validation appears beside the relevant field and does not shift/clip critical controls.
-- [ ] Busy/success/empty/no-results/forbidden/conflict/failure states are readable.
-- [ ] Keyboard focus is visible on interactive controls.
-- [ ] No clipping, overlap, inaccessible off-screen actions, or unintended horizontal page overflow.
+- [x] Zen Green tokens/components are consistent with Lab 2.
+- [x] Role navigation is correct; unauthorized destinations are absent.
+- [x] Current User name + role are visible after normal authentication.
+- [x] Requested Priority/read-only Requester fields are visually distinct from editable staff controls.
+- [x] Public Comments and Internal Notes are unmistakably different and labelled by audience.
+- [x] Status/priority/role/account badges contain readable text.
+- [x] Validation appears beside the relevant field and does not shift/clip critical controls.
+- [x] Busy/success/empty/no-results/forbidden/conflict/failure states are readable.
+- [x] Keyboard focus is visible on interactive controls.
+- [x] No clipping, overlap, inaccessible off-screen actions, or unintended horizontal page overflow.
