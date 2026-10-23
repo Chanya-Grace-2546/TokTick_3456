@@ -52,7 +52,6 @@ Run Prisma migrations:
 ```bash
 cd server
 npm run prisma:migrate
-npm run prisma:seed
 ```
 
 Seed the database:
@@ -119,6 +118,8 @@ npm test
 
 ## End-to-End (E2E) Testing
 
+> **Warning:** Playwright must use a dedicated test database because its setup modifies test accounts. Do not run it against your development or shared database.
+
 The E2E tests use Playwright to verify authentication, requester regression, staff operations, and user administration across responsive viewports. Global setup prepares dedicated E2E accounts. Use a local migrated, seeded database.
 
 ### Install E2E Dependencies
@@ -138,13 +139,46 @@ npx playwright install chromium
 
 ### Run the E2E Tests
 
-Make sure the backend and frontend are running first.
+Run each terminal block from the repository root. The backend and E2E blocks
+use subshells with `set -eu`, so a failed check or command stops that block.
 
-**Terminal 1 — Backend:**
+Before starting the backend, configure `TOKTICKIT_E2E_DATABASE_URL` securely in
+both Terminal 1 and Terminal 3 with the **same connection URL** for
+`toktickit_e2e_test`, including the same dedicated non-`public` schema. Do not use
+the development database `toktickit`, put credentials in shell history, or edit
+the existing `.env` files. Each terminal must explicitly export `DATABASE_URL`;
+exports in one terminal do not propagate to another.
+
+**Terminal 1 — Verify, migrate, seed, then start the backend:**
 
 ```bash
+(
+set -eu
 cd server
+export DATABASE_URL="${TOKTICKIT_E2E_DATABASE_URL:?Configure the dedicated E2E database URL first}"
+node --input-type=module <<'JS'
+import { PrismaClient } from '@prisma/client';
+const url = new URL(process.env.DATABASE_URL);
+const schema = url.searchParams.get('schema');
+if (url.pathname !== '/toktickit_e2e_test' || !schema || schema === 'public') {
+  throw new Error('Refusing a database/schema other than the dedicated E2E target.');
+}
+const prisma = new PrismaClient();
+try {
+  const [target] = await prisma.$queryRaw`SELECT current_database() AS name, current_schema() AS schema`;
+  if (target.name !== 'toktickit_e2e_test' || target.schema !== schema) {
+    throw new Error('Unexpected database/schema; provision the dedicated E2E schema first.');
+  }
+  console.log('Verified dedicated E2E database and schema.');
+} finally {
+  await prisma.$disconnect();
+}
+JS
+npx prisma migrate deploy
+npx prisma generate
+npm run prisma:seed
 npm run dev
+)
 ```
 
 **Terminal 2 — Frontend:**
@@ -157,9 +191,37 @@ npm run dev
 **Terminal 3 — E2E Tests:**
 
 ```bash
-cd e2e
+(
+set -eu
+cd server
+export DATABASE_URL="${TOKTICKIT_E2E_DATABASE_URL:?Use the same E2E database URL as Terminal 1}"
+node --input-type=module <<'JS'
+import { PrismaClient } from '@prisma/client';
+const url = new URL(process.env.DATABASE_URL);
+const schema = url.searchParams.get('schema');
+if (url.pathname !== '/toktickit_e2e_test' || !schema || schema === 'public') {
+  throw new Error('Refusing a database/schema other than the dedicated E2E target.');
+}
+const prisma = new PrismaClient();
+try {
+  const [target] = await prisma.$queryRaw`SELECT current_database() AS name, current_schema() AS schema`;
+  if (target.name !== 'toktickit_e2e_test' || target.schema !== schema) {
+    throw new Error('Unexpected database/schema; migrate and seed the E2E target first.');
+  }
+  console.log('Verified E2E setup database and schema.');
+} finally {
+  await prisma.$disconnect();
+}
+JS
+cd ../e2e
 npx playwright test
+)
 ```
+
+Playwright global setup passes its environment to `prepare-e2e-users.ts`, so
+this explicit `DATABASE_URL` makes account preparation use the same database
+and schema as the backend. Start the backend only after verification, migration,
+and seeding succeed; stop any previously running backend on port 3000 first.
 
 > **Note:** Do not use `npx vitest run` for E2E testing. E2E tests use Playwright.
 
