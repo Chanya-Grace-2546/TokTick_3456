@@ -8,6 +8,7 @@ import { Prisma } from "@prisma/client";
 
 import { getPrisma } from "./prisma.js";
 import { adminUsers } from "./adminUsers.js";
+import { actionsTaken, actionBodyError } from "./actionsTaken.js";
 import { validateCreateTicket } from "./validateCreateTicket.js";
 import { validateStaffQueueQuery } from "./validateStaffQueueQuery.js";
 import {
@@ -59,6 +60,8 @@ app.use(
 app.use(express.json());
 app.use(cookieParser());
 app.use("/api/admin/users", adminUsers);
+app.use("/api/tickets/:ticketId/actions", actionsTaken);
+app.use("/api/tickets/:ticketId/actions", actionBodyError);
 
 // ---------------------------------------------------------------------------
 // Issue 2 — API health check
