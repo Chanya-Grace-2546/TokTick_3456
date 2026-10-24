@@ -61,9 +61,14 @@ model User {
   // Requester apparent-resolution indications made by this User.
   requesterResolvedTickets Ticket[] @relation("TicketRequesterResolvedBy")
 
-  publicComments PublicComment[]
-  internalNotes  InternalNote[]
-  sessions       Session[]
+  publicComments        PublicComment[]
+  internalNotes         InternalNote[]
+  sessions              Session[]
+  actionsPerformed      ActionTaken[]          @relation("ActionPerformedBy")
+  actionsAssigned       ActionTaken[]          @relation("ActionAssignedTo")
+  actionHistory         ActionTakenHistory[]   @relation("ActionHistoryActor")
+  ticketStatusHistory   TicketStatusHistory[]  @relation("TicketHistoryActor")
+  actionIdempotencyKeys ActionIdempotencyKey[] @relation("ActionIdempotencyActor")
 
   @@index([role])
   @@index([isActive])
@@ -151,6 +156,10 @@ model Ticket {
   publicComments PublicComment[]
   internalNotes  InternalNote[]
 
+  actionsTaken          ActionTaken[]
+  statusHistory         TicketStatusHistory[]
+  actionIdempotencyKeys ActionIdempotencyKey[]
+
   @@index([requesterId])
   @@index([ownerId])
   @@index([status])
@@ -231,4 +240,84 @@ model InternalNote {
 
   @@index([ticketId])
   @@index([authorId])
+}
+
+// Lab 4: persistence only; workflow and authentication belong to services.
+enum ActionState {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model ActionTaken {
+  id                Int                  @id @default(autoincrement())
+  ticketId          Int
+  performedByUserId Int
+  assignedToUserId  Int?
+  actionAt          DateTime             @default(now())
+  description       String
+  result            String?
+  followUpRequired  Boolean              @default(false)
+  followUpNote      String?
+  attachmentNotes   String?
+  state             ActionState          @default(PLANNED)
+  version           Int                  @default(1)
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  ticket            Ticket               @relation(fields: [ticketId], references: [id], onDelete: Restrict)
+  performedBy       User                 @relation("ActionPerformedBy", fields: [performedByUserId], references: [id], onDelete: Restrict)
+  assignedTo        User?                @relation("ActionAssignedTo", fields: [assignedToUserId], references: [id], onDelete: Restrict)
+  history           ActionTakenHistory[]
+
+  @@index([ticketId, actionAt, id])
+  @@index([assignedToUserId, state])
+  @@index([performedByUserId])
+}
+
+model ActionTakenHistory {
+  id          Int          @id @default(autoincrement())
+  actionId    Int
+  actorUserId Int
+  oldState    ActionState?
+  newState    ActionState
+  beforeJson  Json?
+  afterJson   Json
+  occurredAt  DateTime     @default(now())
+  action      ActionTaken  @relation(fields: [actionId], references: [id], onDelete: Restrict)
+  actor       User         @relation("ActionHistoryActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([actionId, occurredAt, id])
+  @@index([actorUserId])
+}
+
+model TicketStatusHistory {
+  id          Int          @id @default(autoincrement())
+  ticketId    Int
+  actorUserId Int
+  oldStatus   TicketStatus
+  newStatus   TicketStatus
+  occurredAt  DateTime     @default(now())
+  ticket      Ticket       @relation(fields: [ticketId], references: [id], onDelete: Restrict)
+  actor       User         @relation("TicketHistoryActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([ticketId, occurredAt, id])
+  @@index([actorUserId])
+}
+
+model ActionIdempotencyKey {
+  id             Int      @id @default(autoincrement())
+  actorUserId    Int
+  ticketId       Int
+  key            String
+  payloadHash    String
+  responseJson   Json
+  responseStatus Int
+  createdAt      DateTime @default(now())
+  expiresAt      DateTime
+  actor          User     @relation("ActionIdempotencyActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+  ticket         Ticket   @relation(fields: [ticketId], references: [id], onDelete: Restrict)
+
+  @@unique([actorUserId, ticketId, key])
+  @@index([ticketId])
 }
