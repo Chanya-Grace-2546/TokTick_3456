@@ -12,7 +12,7 @@ async function allRows() {
 let baseline: Awaited<ReturnType<typeof snapshot>>;
 let restore: () => Promise<void>;
 beforeAll(async () => {
-  fixture.deploy("lab3");
+  await fixture.deploy("lab3");
   const user = await prisma.user.create({ data: { name: "Historical", email: "historical@lab4.test", passwordHash: "unchanged", role: "IT_STAFF" } });
   const category = await prisma.category.create({ data: { name: "Historical" } });
   const system = await prisma.relatedSystem.create({ data: { name: "Historical" } });
@@ -23,8 +23,8 @@ beforeAll(async () => {
   await prisma.internalNote.create({ data: { ticketId: ticket.id, authorId: user.id, content: "Private history" } });
   await prisma.session.create({ data: { userId: user.id, tokenHash: "historical-token", expiresAt: new Date("2030-01-01Z") } });
   baseline = await snapshot();
-  restore = fixture.backup();
-  fixture.deploy("lab4");
+  restore = await fixture.backup();
+  await fixture.deploy("lab4");
 }, 65000);
 afterAll(() => fixture.dispose());
 
@@ -38,9 +38,9 @@ describe("MIG-01/MIG-02 Lab 3 to Lab 4 additive migration", () => {
     expect(await prisma.$queryRaw`SELECT column_name FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='Ticket' AND column_name='version'`).toEqual([]);
   });
   it("seed repeats preserve IDs, existing data and edited demo Actions", async () => {
-    fixture.seed();
+    await fixture.seed();
     const first = await allRows();
-    fixture.seed();
+    await fixture.seed();
     expect(await allRows()).toEqual(first);
     expect(await prisma.actionTaken.count()).toBe(5);
     expect(await prisma.actionTakenHistory.count()).toBe(5);
@@ -56,7 +56,7 @@ describe("MIG-01/MIG-02 Lab 3 to Lab 4 additive migration", () => {
     const category = await prisma.category.findUniqueOrThrow({ where: { name: "Hardware" } });
     await prisma.category.update({ where: { id: category.id }, data: { isActive: false } });
     const edited = await allRows();
-    fixture.seed();
+    await fixture.seed();
     expect(await allRows()).toEqual(edited);
     for (const [i, table] of tables.entries()) {
       const ids = (baseline[i] as { id: number }[]).map(row => row.id);
@@ -67,7 +67,7 @@ describe("MIG-01/MIG-02 Lab 3 to Lab 4 additive migration", () => {
     await restore();
     expect(await snapshot()).toEqual(baseline);
     expect(await prisma.$queryRaw`SELECT table_name FROM information_schema.tables WHERE table_schema=current_schema() AND table_name='ActionTaken'`).toEqual([]);
-    fixture.deploy("lab4");
+    await fixture.deploy("lab4");
     expect(await snapshot()).toEqual(baseline);
     expect(await prisma.actionTaken.count()).toBe(0);
   }, 65000);

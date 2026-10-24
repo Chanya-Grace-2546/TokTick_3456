@@ -2,23 +2,21 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import bcrypt from "bcryptjs";
-import { PrismaClient, Role, User } from "@prisma/client";
+import { Role, User } from "@prisma/client";
 import { afterAll, beforeAll, beforeEach, expect } from "vitest";
+import { DisposableDatabase, subprocessEnvironment } from "../../helpers/databaseSafety.mjs";
 
 // Each test file gets its own migrated schema. Never alter seeded/development
 // administrators to simulate the last-active-admin boundary.
-const schema = `issue7_test_${randomUUID().replaceAll("-", "")}`;
-const sourceUrl = process.env.DATABASE_URL;
-if (!sourceUrl) throw new Error("Administrator API tests require DATABASE_URL.");
-const databaseUrl = new URL(sourceUrl);
-databaseUrl.searchParams.set("schema", schema);
-export const prisma = new PrismaClient({ datasources: { db: { url: databaseUrl.toString() } } });
+const database = new DisposableDatabase("issue7_test");
+export const prisma = database.prisma;
 export const origin = process.env.CLIENT_ORIGIN ?? "http://localhost:5173";
 export const password = "AdminTest!123";
 export const replacementPassword = "Replacement!456";
 let passwordHash: string;
 
 export async function createUser(overrides: Partial<Pick<User, "name" | "email" | "role" | "isActive" | "mustChangePassword">> = {}) {
+  await database.verify();
   return prisma.user.create({ data: {
     name: "Test Person", email: `${randomUUID()}@example.test`,
     passwordHash, role: "REQUESTER", isActive: true,
@@ -27,6 +25,7 @@ export async function createUser(overrides: Partial<Pick<User, "name" | "email" 
 }
 
 export async function sessionFor(user: User, options: { expired?: boolean; invalidated?: boolean } = {}) {
+  await database.verify();
   const token = randomBytes(32).toString("hex");
   await prisma.session.create({ data: {
     userId: user.id, tokenHash: createHash("sha256").update(token).digest("hex"),
@@ -37,6 +36,7 @@ export async function sessionFor(user: User, options: { expired?: boolean; inval
 }
 
 export async function createTicket(requesterId: number, ownerId: number | null = null) {
+  await database.verify();
   const category = await prisma.category.create({ data: { name: randomUUID() } });
   const system = await prisma.relatedSystem.create({ data: { name: randomUUID() } });
   return prisma.ticket.create({ data: {
@@ -62,21 +62,25 @@ export function useAdminDatabase() {
   };
 
   beforeAll(async () => {
+    await database.create();
+    await database.verify();
     const serverDirectory = fileURLToPath(new URL("../../..", import.meta.url));
     try {
       execFileSync(process.execPath, ["node_modules/prisma/build/index.js", "migrate", "deploy"], {
         cwd: serverDirectory,
-        env: { ...process.env, DATABASE_URL: databaseUrl.toString() },
+        env: subprocessEnvironment(database),
         stdio: "pipe", timeout: 60_000,
       });
     } catch {
       // Do not echo connection strings or migration subprocess environment.
       throw new Error("Could not migrate the isolated Issue 7 test schema. Check PostgreSQL connectivity and schema permissions.");
     }
+    await database.verify();
     passwordHash = await bcrypt.hash(password, 12);
   }, 65_000);
 
   beforeEach(async () => {
+    await database.verify();
     await prisma.internalNote.deleteMany();
     await prisma.publicComment.deleteMany();
     await prisma.attachment.deleteMany();
@@ -94,13 +98,6 @@ export function useAdminDatabase() {
     fixture.adminCookie = await sessionFor(fixture.admin);
   });
 
-  afterAll(async () => {
-    try {
-      // Identifier is generated above, never supplied by a test or environment.
-      await prisma.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
-    } finally {
-      await prisma.$disconnect();
-    }
-  });
+  afterAll(() => database.dispose());
   return fixture;
 }
