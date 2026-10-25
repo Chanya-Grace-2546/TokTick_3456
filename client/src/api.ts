@@ -923,7 +923,8 @@ export async function updateStaffTicketPriority(
 
 export async function updateStaffTicketStatus(
   ticketId: number,
-  status: StaffTicketStatus
+  status: StaffTicketStatus,
+  expectedStatus?: StaffTicketStatus
 ): Promise<{
   id: number;
   status: StaffTicketStatus;
@@ -940,6 +941,7 @@ export async function updateStaffTicketStatus(
         },
         body: JSON.stringify({
           status,
+          ...(expectedStatus === undefined ? {} : { expectedStatus }),
         }),
       }
     )
@@ -982,11 +984,13 @@ export async function createInternalNote(
 
 // Lab 4 — Actions Taken. Server controls performer, timestamps and version.
 export type ActionState = "PLANNED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
+export interface FollowUpResolution { outcome: string; actor: { id: number; name: string }; occurredAt: string }
 export interface ActionTaken {
   id: number; ticketId: number; actionAt: string; description: string; result: string | null;
   performedBy: { id: number; name: string }; assignedTo: { id: number; name: string } | null;
   followUpRequired: boolean; followUpNote: string | null; attachmentNotes: string | null;
   state: ActionState; version: number; createdAt: string; updatedAt: string;
+  followUpResolution?: FollowUpResolution | null;
 }
 export interface ActionInput {
   actionAt: string; description: string; result: string | null; assignedToUserId: number | null;
@@ -1015,4 +1019,8 @@ export function createAction(ticketId: number, body: ActionInput, key: string): 
 }
 export function updateAction(ticketId: number, actionId: number, body: Partial<ActionInput> & { version: number }): Promise<{ action: ActionTaken }> {
   return actionRequest(`${ticketId}/actions/${actionId}`, "PATCH", body);
+}
+
+export function recordFollowUpResolution(ticketId: number, actionId: number, body: { version: number; outcome: string }): Promise<{ followUpResolution: FollowUpResolution }> {
+  return actionRequest(`${ticketId}/actions/${actionId}/follow-up-resolution`, "POST", body);
 }

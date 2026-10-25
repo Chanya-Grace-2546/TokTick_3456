@@ -240,3 +240,19 @@ Run existing Lab 2 and Lab 3 authentication, requester ownership, Ticket detail,
 - [ ] Every AC and FR/NFR/BR trace is verified against the implemented test files.
 - [ ] Unit/API/UI/auth/migration/performance/E2E and Labs 2–3 regression evidence captured.
 - [ ] Reviewer PR comments and approvals, AI-use reflection, README and final PDF Answer Part 1–9 completed separately.
+
+### Issue 5 — Ticket workflow and follow-up verification
+
+AC-10/36/45: cover zero-Action resolution, unfinished Action rejection, completed required follow-up rejection, typed satisfaction event acceptance and cancelled Action exclusion. Verify completed Action rows/history snapshots remain unchanged and ordinary notes cannot satisfy the gate.
+
+AC-35/27: cancellation atomically updates unfinished Actions and versions, appends Action history and Ticket status history, and preserves terminal Actions. Inject audit-write failure and assert full rollback.
+
+AC-09/11/38: retain the Lab 3 status matrix and flat response; legacy status requests work; optional expectedStatus rejects stale updates. Concurrent transitions and Action writes must serialize through Ticket locks without invalid resolution or duplicate follow-up events. Identical satisfaction repeats return one event, different outcomes conflict.
+
+Authorization tests cover requester/anonymous/expired/inactive/initial-password/Origin checks and Ticket ownership reads. RESOLVED/CLOSED/CANCELLED reject Action mutations, matching unexpired creation replay remains safe, and REOPENED allows writes.
+
+Frontend tests cover resolution feedback, explicit stale-status review, draft retention, read-only Tickets, follow-up outcome validation/display/retry, requester restrictions and existing idempotency behavior. Run full server/client regressions, type checking and mocked responsive checks at 375/768/1440px. Database tests use only registered disposable non-public schemas in toktickit_e2e_test; no development database writes or new migrations.
+
+Initial local Issue 5 verification (2026-10-25, feature/lab4-ticket-workflow-resolution): all 547 server tests in 28 files and all 290 client tests in 24 files passed. The separate mock-only safety suite passed all 69 tests. Server and client `tsc --noEmit` passed. API-mocked Chromium checks passed for Staff and Requester at 375, 768 and 1440px, including follow-up outcome recording, resolution, retained disabled drafts and no horizontal overflow. These browser checks used only a temporary local frontend; they are not full-stack E2E acceptance evidence. Database suites used registered disposable schemas in toktickit_e2e_test. No development database writes, new migrations or schema changes were performed.
+
+Post-review correction verification (2026-10-25): 560 server tests in 28 files, 294 client tests in 24 files and 69 mock-only safety tests passed; server/client TypeScript checks and git diff --check passed. Controlled database barriers verify both orderings of Action creation/editing and follow-up satisfaction against Ticket resolution/cancellation, plus administrator deactivation/password reset against authenticated writes. PostgreSQL lock inspection confirms a User-blocked writer does not already hold Session FOR SHARE, so retries cannot mask inverted lock ordering. Action-history failure rolls cancellation back, including IN_PROGRESS Actions. Frontend tests retain outcome drafts during authoritative review and reject late cross-Ticket recovery responses. API-mocked Chromium recovery checks passed at 375/768/1440px with no horizontal overflow; these checks use no real backend or database. All database-backed suites used registered disposable schemas in toktickit_e2e_test.

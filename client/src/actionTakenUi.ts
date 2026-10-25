@@ -37,3 +37,5 @@ export function actionPatch(draft: ActionDraft, original: ActionTaken): Partial<
   return Object.fromEntries((Object.keys(draft) as (keyof ActionDraft)[])
     .filter(key => draft[key] !== initial[key]).map(key => [key, values[key]])) as Partial<ActionInput>;
 }
+
+export const ticketActionsReadOnly = (status?: string) => !!status && ["RESOLVED", "CLOSED", "CANCELLED"].includes(status);

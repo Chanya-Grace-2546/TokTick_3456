@@ -1,3 +1,5 @@
+import { transitionTicket, validateTicketTransition } from "./ticketWorkflow.js";
+import { ActionError } from "./validateActionTaken.js";
 import express, { Request, Response } from "express";
 import cors from "cors";
 import fs from "fs";
@@ -11,10 +13,6 @@ import { adminUsers } from "./adminUsers.js";
 import { actionsTaken, actionBodyError } from "./actionsTaken.js";
 import { validateCreateTicket } from "./validateCreateTicket.js";
 import { validateStaffQueueQuery } from "./validateStaffQueueQuery.js";
-import {
-  canTransitionTicketStatus,
-  isTicketStatus,
-} from "./statusTransitions.js";
 import { createTicketWithGeneratedNumber } from "./ticketNumber.js";
 import { upload, UPLOADS_DIR } from "./attachmentUpload.js";
 import {
@@ -965,76 +963,16 @@ app.patch(
       return;
     }
 
-    const { status } = req.body as {
-      status?: unknown;
-    };
-
-    if (!isTicketStatus(status)) {
-      res.status(400).json({
-        error: "VALIDATION_FAILED",
-        fields: {
-          status: "Choose a valid Ticket status.",
-        },
-      });
-      return;
-    }
-
     try {
-      const prisma = getPrisma();
-
-      const ticket = await prisma.ticket.findUnique({
-        where: {
-          id: ticketId,
-        },
-        select: {
-          id: true,
-          status: true,
-        },
-      });
-
-      if (!ticket) {
-        res.status(404).json({
-          error: "TICKET_NOT_FOUND",
-        });
-        return;
+      const { status, expectedStatus } = validateTicketTransition(req.body);
+      res.status(200).json(await transitionTicket(req, ticketId, status, expectedStatus));
+    } catch (error) {
+      if (error instanceof ActionError) {
+        res.status(error.status).json({ error: error.code, ...(error.fields ? { fields: error.fields } : {}) });
+      } else {
+        console.error("Failed to update Ticket status.");
+        res.status(500).json({ error: "UNEXPECTED_ERROR" });
       }
-
-      if (
-        !canTransitionTicketStatus(
-          ticket.status,
-          status
-        )
-      ) {
-        res.status(409).json({
-          error: "INVALID_STATUS_TRANSITION",
-        });
-        return;
-      }
-
-      const updated = await prisma.ticket.update({
-        where: {
-          id: ticketId,
-        },
-        data: {
-          status,
-        },
-        select: {
-          id: true,
-          status: true,
-          ownerId: true,
-        },
-      });
-
-      res.status(200).json(updated);
-    } catch (err) {
-      console.error(
-        "Failed to update Ticket status:",
-        err
-      );
-
-      res.status(500).json({
-        error: "UNEXPECTED_ERROR",
-      });
     }
   }
 );

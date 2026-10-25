@@ -1,5 +1,6 @@
+import { isDeepStrictEqual } from "node:util";
 import { createHash } from "node:crypto";
-import { ActionTaken, Prisma } from "@prisma/client";
+import { ActionTaken, Prisma, TicketStatus } from "@prisma/client";
 import { AuthenticatedRequest, AuthUser } from "./auth.js";
 import { getPrisma } from "./prisma.js";
 import { canUpdateActionState, isTerminalAction } from "./actionStateTransitions.js";
@@ -12,7 +13,7 @@ const people = {
 type ActionRecord = Prisma.ActionTakenGetPayload<{ include: typeof people }>;
 const json = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value));
 
-function snapshot(action: ActionTaken) {
+export function snapshot(action: ActionTaken) {
   // Scalar fields only; no User/session data is ever copied into audit JSON.
   return json({ id: action.id, ticketId: action.ticketId, performedByUserId: action.performedByUserId,
     assignedToUserId: action.assignedToUserId, actionAt: action.actionAt, description: action.description,
@@ -21,12 +22,49 @@ function snapshot(action: ActionTaken) {
     createdAt: action.createdAt, updatedAt: action.updatedAt });
 }
 
-function resource(action: ActionRecord) {
+function resource(action: ActionRecord, followUpResolution: FollowUpResolution | null = null) {
   return { id: action.id, ticketId: action.ticketId, actionAt: action.actionAt,
     description: action.description, result: action.result, performedBy: action.performedBy,
     assignedTo: action.assignedTo, followUpRequired: action.followUpRequired,
     followUpNote: action.followUpNote, attachmentNotes: action.attachmentNotes,
-    state: action.state, version: action.version, createdAt: action.createdAt, updatedAt: action.updatedAt };
+    state: action.state, version: action.version, createdAt: action.createdAt, updatedAt: action.updatedAt, followUpResolution };
+}
+
+export interface FollowUpResolution { outcome: string; actor: { id: number; name: string }; occurredAt: Date }
+const EVENT = "FOLLOW_UP_SATISFIED";
+export function actionWritesAllowed(status: TicketStatus): boolean { return !["RESOLVED", "CLOSED", "CANCELLED"].includes(status); }
+export async function lockTicket(tx: Prisma.TransactionClient, ticketId: number, exclusive = false) {
+  const rows = exclusive
+    ? await tx.$queryRaw<{ id: number; status: TicketStatus }[]>`SELECT id,status FROM "Ticket" WHERE id=${ticketId} FOR UPDATE`
+    : await tx.$queryRaw<{ id: number; status: TicketStatus }[]>`SELECT id,status FROM "Ticket" WHERE id=${ticketId} FOR SHARE`;
+  return rows[0];
+}
+function requireWritable(ticket: { status: TicketStatus } | undefined) {
+  if (!ticket) throw new ActionError(404, "NOT_FOUND");
+  if (!actionWritesAllowed(ticket.status)) throw new ActionError(409, "TICKET_ACTIONS_READ_ONLY");
+}
+// Existing snapshots have no event property. Only this server-owned typed event
+// can satisfy follow-up; the completed Action itself remains byte-for-byte intact.
+export function resolutionEvent(action: ActionTaken, row: { oldState: string | null; newState: string; beforeJson: Prisma.JsonValue | null; afterJson: Prisma.JsonValue; actor: { id: number; name: string }; occurredAt: Date }): FollowUpResolution | null {
+  const value = row.afterJson as Record<string, Prisma.JsonValue> | null;
+  const event = value?.event as Record<string, Prisma.JsonValue> | null;
+  if (action.state !== "COMPLETED" || !action.followUpRequired || row.oldState !== "COMPLETED" || row.newState !== "COMPLETED" ||
+      value?.id !== action.id || value?.version !== action.version || event?.type !== EVENT || event?.schemaVersion !== 1 || typeof event?.outcome !== "string" || !event.outcome.trim()) return null;
+  // The event must preserve the real snapshot, rather than masquerading as an edit.
+  const { event: _event, ...after } = value;
+  if (!isDeepStrictEqual(after, snapshot(action)) || !isDeepStrictEqual(row.beforeJson, snapshot(action))) return null;
+  return { outcome: event.outcome, actor: row.actor, occurredAt: row.occurredAt };
+}
+export async function resolutionsFor(tx: Prisma.TransactionClient, actions: ActionTaken[]) {
+  const result = new Map<number, FollowUpResolution>();
+  if (!actions.length) return result;
+  const byId = new Map(actions.map(action => [action.id, action]));
+  const rows = await tx.actionTakenHistory.findMany({ where: { actionId: { in: actions.map(action => action.id) }, oldState: "COMPLETED", newState: "COMPLETED", afterJson: { path: ["event", "type"], equals: EVENT } }, include: { actor: { select: { id: true, name: true } } }, orderBy: [{ occurredAt: "asc" }, { id: "asc" }] });
+  for (const row of rows) {
+    const resolution = resolutionEvent(byId.get(row.actionId)!, row);
+    if (resolution && !result.has(row.actionId)) result.set(row.actionId, resolution);
+  }
+  return result;
 }
 
 async function visibleTicket(tx: Prisma.TransactionClient, ticketId: number, actor: Pick<AuthUser, "id" | "role">) {
@@ -35,11 +73,13 @@ async function visibleTicket(tx: Prisma.TransactionClient, ticketId: number, act
   if (!ticket) throw new ActionError(404, "NOT_FOUND");
 }
 
-async function writer(tx: Prisma.TransactionClient, req: AuthenticatedRequest) {
+export async function writer(tx: Prisma.TransactionClient, req: AuthenticatedRequest) {
   // Hold session and actor rows stable through the mutation, including after
   // waiting for another idempotent request. Existing auth middleware still runs first.
-  await tx.$queryRaw`SELECT id FROM "Session" WHERE id=${req.sessionId!} FOR SHARE`;
+  // Administrator deactivation/reset writes User before invalidating Sessions.
+  // Match that order so neither path can hold the other path's next lock.
   await tx.$queryRaw`SELECT id FROM "User" WHERE id=${req.authUser!.id} FOR SHARE`;
+  await tx.$queryRaw`SELECT id FROM "Session" WHERE id=${req.sessionId!} FOR SHARE`;
   const session = await tx.session.findUnique({ where: { id: req.sessionId! }, include: { user: true } });
   if (!session || session.userId !== req.authUser!.id || session.invalidatedAt || session.expiresAt <= new Date() || !session.user.isActive) {
     throw new ActionError(401, "UNAUTHENTICATED");
@@ -59,7 +99,7 @@ async function assignee(tx: Prisma.TransactionClient, userId: number | null | un
   if (!user.isActive) throw new ActionError(422, "INACTIVE_ASSIGNEE", { assignedToUserId: "Choose an active assignee." });
 }
 
-async function mutation<T>(work: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
+export async function mutation<T>(work: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
   for (let attempt = 0; ; attempt++) {
     try {
       return await getPrisma().$transaction(work, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
@@ -77,7 +117,8 @@ export async function listActions(actor: AuthUser, ticketId: number, page: numbe
     const total = await tx.actionTaken.count({ where: { ticketId } });
     const actions = await tx.actionTaken.findMany({ where: { ticketId }, include: people,
       orderBy: [{ actionAt: "asc" }, { id: "asc" }], skip, take: pageSize });
-    return { items: actions.map(resource), page, pageSize, total };
+    const resolutions = await resolutionsFor(tx, actions);
+    return { items: actions.map(action => resource(action, resolutions.get(action.id) ?? null)), page, pageSize, total };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead });
 }
 
@@ -90,6 +131,7 @@ export async function createAction(req: AuthenticatedRequest, ticketId: number, 
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(${lock})`;
     }
     const actor = await writer(tx, req);
+    const ticket = await lockTicket(tx, ticketId);
     await visibleTicket(tx, ticketId, actor);
     if (key !== undefined) {
       // READ COMMITTED sees the prior holder's committed outcome after waiting.
@@ -103,6 +145,7 @@ export async function createAction(req: AuthenticatedRequest, ticketId: number, 
         return { status: existing.responseStatus, body: existing.responseJson };
       }
     }
+    requireWritable(ticket);
     const values = { state: data.state ?? "PLANNED", result: data.result ?? null,
       followUpRequired: data.followUpRequired ?? false, followUpNote: data.followUpNote ?? null } as const;
     validateActionResult(values);
@@ -123,7 +166,9 @@ export async function createAction(req: AuthenticatedRequest, ticketId: number, 
 export async function updateAction(req: AuthenticatedRequest, ticketId: number, actionId: number, data: ActionFields, version: number) {
   return mutation(async tx => {
     const actor = await writer(tx, req);
+    const ticket = await lockTicket(tx, ticketId);
     await visibleTicket(tx, ticketId, actor);
+    requireWritable(ticket);
     const before = await tx.actionTaken.findFirst({ where: { id: actionId, ticketId } });
     if (!before) throw new ActionError(404, "NOT_FOUND");
     if (before.version !== version) throw new ActionError(409, "STALE_UPDATE");
@@ -139,5 +184,24 @@ export async function updateAction(req: AuthenticatedRequest, ticketId: number, 
     await tx.actionTakenHistory.create({ data: { actionId, actorUserId: actor.id,
       oldState: before.state, newState: after.state, beforeJson: snapshot(before), afterJson: snapshot(after) } });
     return { action: resource(after) };
+  });
+}
+
+export async function satisfyFollowUp(req: AuthenticatedRequest, ticketId: number, actionId: number, version: number, outcome: string) {
+  return mutation(async tx => {
+    const actor = await writer(tx, req);
+    const ticket = await lockTicket(tx, ticketId, true);
+    requireWritable(ticket);
+    const action = await tx.actionTaken.findFirst({ where: { id: actionId, ticketId } });
+    if (!action) throw new ActionError(404, "NOT_FOUND");
+    if (action.version !== version) throw new ActionError(409, "STALE_UPDATE");
+    if (action.state !== "COMPLETED" || !action.followUpRequired) throw new ActionError(422, "VALIDATION_ERROR", { outcome: "Only completed Actions with required follow-up can record satisfaction." });
+    const existing = (await resolutionsFor(tx, [action])).get(action.id);
+    if (existing) {
+      if (existing.outcome !== outcome) throw new ActionError(409, "FOLLOW_UP_ALREADY_SATISFIED");
+      return { status: 200, body: { followUpResolution: existing } };
+    }
+    const saved = await tx.actionTakenHistory.create({ data: { actionId, actorUserId: actor.id, oldState: "COMPLETED", newState: "COMPLETED", beforeJson: snapshot(action), afterJson: { ...(snapshot(action) as Prisma.InputJsonObject), event: { type: EVENT, schemaVersion: 1, outcome } } } });
+    return { status: 201, body: { followUpResolution: { outcome, actor: { id: actor.id, name: actor.name }, occurredAt: saved.occurredAt } } };
   });
 }
