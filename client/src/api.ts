@@ -979,3 +979,40 @@ export async function createInternalNote(
     )
   );
 }
+
+// Lab 4 — Actions Taken. Server controls performer, timestamps and version.
+export type ActionState = "PLANNED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
+export interface ActionTaken {
+  id: number; ticketId: number; actionAt: string; description: string; result: string | null;
+  performedBy: { id: number; name: string }; assignedTo: { id: number; name: string } | null;
+  followUpRequired: boolean; followUpNote: string | null; attachmentNotes: string | null;
+  state: ActionState; version: number; createdAt: string; updatedAt: string;
+}
+export interface ActionInput {
+  actionAt: string; description: string; result: string | null; assignedToUserId: number | null;
+  followUpRequired: boolean; followUpNote: string | null; attachmentNotes: string | null; state: ActionState;
+}
+export interface ActionPage { items: ActionTaken[]; page: number; pageSize: number; total: number }
+export class ActionRequestError extends Error {
+  constructor(public status: number, public code: string, public fields: FieldErrors = {}) { super(code); }
+}
+async function actionRequest<T>(path: string, method = "GET", body?: unknown, key?: string): Promise<T> {
+  const res = await fetch(`${API_URL}/api/tickets/${path}`, {
+    method, credentials: "include",
+    ...(body === undefined ? {} : { headers: { "Content-Type": "application/json", ...(key ? { "Idempotency-Key": key } : {}) }, body: JSON.stringify(body) }),
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    throw new ActionRequestError(res.status, error.error ?? "ACTION_REQUEST_FAILED", error.fields ?? {});
+  }
+  return res.json();
+}
+export function fetchActions(ticketId: number, page = 1): Promise<ActionPage> {
+  return actionRequest(`${ticketId}/actions?page=${page}&pageSize=20`);
+}
+export function createAction(ticketId: number, body: ActionInput, key: string): Promise<{ action: ActionTaken }> {
+  return actionRequest(`${ticketId}/actions`, "POST", body, key);
+}
+export function updateAction(ticketId: number, actionId: number, body: Partial<ActionInput> & { version: number }): Promise<{ action: ActionTaken }> {
+  return actionRequest(`${ticketId}/actions/${actionId}`, "PATCH", body);
+}

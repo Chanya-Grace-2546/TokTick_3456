@@ -1,3 +1,5 @@
+import type { CSSProperties } from "react";
+
 // Lab 2 — Zen Green Theme tokens (ui-spec.md §Zen Green Theme UI Specification)
 // Single source of truth so every screen uses the exact same values instead
 // of scattered hex strings.
@@ -12,3 +14,12 @@ export const zenGreen = {
   warning: "#B8860B",
   success: "#0B7A46",
 };
+
+// Style the visible header cells directly, using the existing Zen Green
+// primary. Bootstrap variables also keep its cell painting consistent.
+export const ticketTableHeaderStyle = {
+  backgroundColor: zenGreen.primary,
+  color: "#FFFFFF",
+  "--bs-table-bg": zenGreen.primary,
+  "--bs-table-color": "#FFFFFF",
+} as CSSProperties;

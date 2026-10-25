@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { fetchTickets, TicketListItem, Priority } from "../api.js";
-import { zenGreen } from "../theme.js";
+import { ticketTableHeaderStyle, zenGreen } from "../theme.js";
 
 type ScreenState = "loading" | "error" | "ready";
 type SortField = "ticketNumber" | "createdAt" | "updatedAt";
@@ -260,12 +260,13 @@ export default function TicketsPlaceholder() {
         <>
           <div
             className="table-responsive d-none d-lg-block"
-            style={cardStyle}
+            style={{ ...cardStyle, borderRadius: 10, overflow: "hidden" }}
           >
             <table className="table mb-0">
               <thead>
                 <tr>
                   <th
+                    style={ticketTableHeaderStyle}
                     role="button"
                     onClick={() => toggleSort("ticketNumber")}
                   >
@@ -274,12 +275,13 @@ export default function TicketsPlaceholder() {
                       (sortDir === "asc" ? "▲" : "▼")}
                   </th>
 
-                  <th>Summary</th>
-                  <th>Category</th>
-                  <th>Priority</th>
-                  <th>Status</th>
+                  <th style={ticketTableHeaderStyle}>Summary</th>
+                  <th style={ticketTableHeaderStyle}>Category</th>
+                  <th style={ticketTableHeaderStyle}>Priority</th>
+                  <th style={ticketTableHeaderStyle}>Status</th>
 
                   <th
+                    style={ticketTableHeaderStyle}
                     role="button"
                     onClick={() => toggleSort("createdAt")}
                   >
@@ -289,6 +291,7 @@ export default function TicketsPlaceholder() {
                   </th>
 
                   <th
+                    style={ticketTableHeaderStyle}
                     role="button"
                     onClick={() => toggleSort("updatedAt")}
                   >
