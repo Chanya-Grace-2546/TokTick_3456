@@ -1,3 +1,6 @@
+import { zenGreen } from "../theme.js";
+import "./ticketDetail.css";
+import ActionsTaken from "../components/ActionsTaken.js";
 import {
   ChangeEvent,
   FormEvent,
@@ -558,7 +561,8 @@ export default function TicketDetail() {
       >
         <Link
           to="/tickets"
-          className="d-inline-block mb-3 small"
+          className="ticket-back-link d-inline-block mb-3 small"
+          style={{ color: zenGreen.primary }}
         >
           ← Back to My Tickets
         </Link>
@@ -589,7 +593,8 @@ export default function TicketDetail() {
     >
       <Link
         to="/tickets"
-        className="d-inline-block mb-3 small"
+        className="ticket-back-link d-inline-block mb-3 small"
+          style={{ color: zenGreen.primary }}
       >
         ← Back to My Tickets
       </Link>
@@ -1141,6 +1146,7 @@ export default function TicketDetail() {
           )}
         </form>
       </div>
+      <ActionsTaken key={ticket.id} ticketId={ticket.id} />
     </div>
   );
 }

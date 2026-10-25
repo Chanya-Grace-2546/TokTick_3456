@@ -1,3 +1,5 @@
+import "./ticketDetail.css";
+import ActionsTaken from "../components/ActionsTaken.js";
 import { useEffect, useState } from "react";
 import {
   Link,
@@ -201,7 +203,7 @@ export default function StaffTicketDetail() {
     id: string;
   }>();
   const navigate = useNavigate();
-  const { refreshUser } = useAuth();
+  const { user, refreshUser } = useAuth();
 
   const [state, setState] =
     useState<ScreenState>("loading");
@@ -255,7 +257,7 @@ export default function StaffTicketDetail() {
     return false;
   }
 
-  async function load() {
+  async function load(background = false) {
     if (!id) {
       setState("not-found");
       return;
@@ -271,7 +273,7 @@ export default function StaffTicketDetail() {
       return;
     }
 
-    setState("loading");
+    if (!background) setState("loading");
     setMessage("");
     setOperationError("");
 
@@ -316,7 +318,8 @@ export default function StaffTicketDetail() {
         }
       }
 
-      setState("error");
+      if (background) setOperationError("Could not refresh the Ticket. Your Action draft is retained; retry the Ticket refresh.");
+      else setState("error");
     }
   }
 
@@ -336,7 +339,7 @@ export default function StaffTicketDetail() {
     try {
       await action();
       setMessage(successMessage);
-      await load();
+      await load(true);
       setMessage(successMessage);
     } catch (failure) {
       if (
@@ -492,7 +495,7 @@ export default function StaffTicketDetail() {
         content
       );
       setPublicContent("");
-      await load();
+      await load(true);
       setMessage(
         "Public Comment posted."
       );
@@ -611,7 +614,8 @@ export default function StaffTicketDetail() {
       >
         <Link
           to="/staff/tickets"
-          className="d-inline-block mb-3 small"
+          className="ticket-back-link d-inline-block mb-3 small"
+          style={{ color: zenGreen.primary }}
         >
           ← Back to Ticket Queue
         </Link>
@@ -650,7 +654,8 @@ export default function StaffTicketDetail() {
     >
       <Link
         to="/staff/tickets"
-        className="d-inline-block mb-3 small"
+        className="ticket-back-link d-inline-block mb-3 small"
+          style={{ color: zenGreen.primary }}
       >
         ← Back to Ticket Queue
       </Link>
@@ -1361,6 +1366,20 @@ export default function StaffTicketDetail() {
           </div>
         </form>
       </section>
+      <ActionsTaken key={ticket.id} ticketId={ticket.id} canWrite={user?.role === "IT_STAFF" || user?.role === "ADMINISTRATOR"} owners={owners}
+        onRefresh={async () => {
+          try {
+            const latest = await fetchStaffTicketDetail(ticket.id);
+            setTicket(current => current?.id === latest.id ? latest : current);
+          } catch (error) {
+            if (await handleAuthFailure(error)) return;
+            if (error instanceof StaffTicketOperationError && (error.status === 403 || error.status === 404)) {
+              setTicket(null); setState(error.status === 403 ? "forbidden" : "not-found");
+            }
+            throw error;
+          }
+        }}
+        onRefreshOwners={() => { void fetchStaffOwners().then(setOwners).catch(() => setOperationError("Could not refresh eligible staff. Please reload the Ticket.")); }} />
     </div>
   );
 }

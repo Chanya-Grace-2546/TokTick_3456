@@ -6,7 +6,7 @@ import {
   fetchCategories, fetchStaffOwners, fetchStaffTickets,
 } from "../api.js";
 import { useAuth } from "../context/AuthContext.js";
-import { zenGreen } from "../theme.js";
+import { ticketTableHeaderStyle, zenGreen } from "../theme.js";
 
 const DEFAULT_QUERY: StaffQueueParams = { sortBy: "updatedAt", sortDir: "desc", page: 1, pageSize: 10 };
 const STATUSES: StaffTicketStatus[] = ["NEW", "OPEN", "IN_PROGRESS", "WAITING_FOR_REQUESTER", "RESOLVED", "CLOSED", "REOPENED", "CANCELLED"];
@@ -207,17 +207,17 @@ export default function StaffTicketQueue() {
         {data.items.length === 0 ? <p className="p-4 text-center" style={panelStyle}>
           {data.totalItems > 0 ? "No tickets on this page. Use Previous to return." : hasFilters ? "No tickets match your search or filters." : "No tickets in the queue."}
         </p> : <>
-          <div className="d-none d-lg-block" style={panelStyle}>
+          <div className="d-none d-lg-block" style={{ ...panelStyle, borderRadius: 10, overflow: "hidden" }}>
             <table className="table align-middle mb-0" aria-label="Ticket Queue" style={{ tableLayout: "fixed", width: "100%" }}>
               <thead><tr>
-<th scope="col" style={{ width: "14%" }}>Ticket Number</th>
-<th scope="col" style={{ width: "14%" }}>Requester</th>
-<th scope="col" style={{ width: "13%" }}>Updated</th>
-<th scope="col" style={{ width: "19%" }}>Summary</th>
-<th scope="col" style={{ width: "10%" }}>Requested Priority</th>
-<th scope="col" style={{ width: "8%" }}>IT Priority</th>
-<th scope="col" style={{ width: "12%" }}>Status</th>
-<th scope="col" style={{ width: "10%" }}>Owner</th>
+<th scope="col" style={{ ...ticketTableHeaderStyle, width: "14%" }}>Ticket Number</th>
+<th scope="col" style={{ ...ticketTableHeaderStyle, width: "14%" }}>Requester</th>
+<th scope="col" style={{ ...ticketTableHeaderStyle, width: "13%" }}>Updated</th>
+<th scope="col" style={{ ...ticketTableHeaderStyle, width: "19%" }}>Summary</th>
+<th scope="col" style={{ ...ticketTableHeaderStyle, width: "10%" }}>Requested Priority</th>
+<th scope="col" style={{ ...ticketTableHeaderStyle, width: "8%" }}>IT Priority</th>
+<th scope="col" style={{ ...ticketTableHeaderStyle, width: "12%" }}>Status</th>
+<th scope="col" style={{ ...ticketTableHeaderStyle, width: "10%" }}>Owner</th>
               </tr></thead>
               <tbody>{data.items.map(ticket => <tr
                 key={ticket.id}

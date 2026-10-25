@@ -1,3 +1,5 @@
+// Actions integration has dedicated Lab 4 coverage; preserve legacy assertions.
+vi.mock("../../src/components/ActionsTaken.js", () => ({ default: () => null }));
 import {
   describe,
   it,

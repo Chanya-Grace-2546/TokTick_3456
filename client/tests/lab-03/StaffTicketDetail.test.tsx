@@ -1,3 +1,5 @@
+// Actions integration has dedicated Lab 4 coverage; preserve legacy assertions.
+vi.mock("../../src/components/ActionsTaken.js", () => ({ default: () => null }));
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
