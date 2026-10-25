@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useId, useRef, useState } from "react";
 import { ActionInput, ActionRequestError, ActionTaken, createAction, FieldErrors, StaffOwner, updateAction } from "../api.js";
 import { actionDraft, ActionDraft, actionInput, actionPatch, actionLabels, actionStates, terminalAction, validateActionDraft } from "../actionTakenUi.js";
 interface Props {
-  ticketId: number; action?: ActionTaken; owners: StaffOwner[]; performer: string;
+  ticketId: number; action?: ActionTaken; readOnly?: boolean; owners: StaffOwner[]; performer: string;
   onCancel: () => void; onSuccess: () => void; onFailure: (error: unknown) => void;
   onReload: () => Promise<ActionTaken | undefined>; refreshOwners: () => void;
 }
@@ -25,7 +25,7 @@ export default function ActionTakenForm(props: Props) {
   const ineligible = !!draft.assignedToUserId && !props.owners.some(owner => String(owner.id) === draft.assignedToUserId);
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (busy.current || conflict || expired || (base && terminalAction(base.state))) return;
+    if (busy.current || conflict || expired || (props.readOnly && !ambiguous) || (base && terminalAction(base.state))) return;
     const fields = ambiguous ? {} : validateActionDraft(draft);
     if (invalidState) fields.state = "The saved state changed. Explicitly choose an allowed state before saving.";
     if (!ambiguous && ineligible) fields.assignedToUserId = "Choose an active assignee or Unassigned.";
@@ -47,7 +47,8 @@ export default function ActionTakenForm(props: Props) {
         setErrors(error.fields); setAmbiguous(false); setMessage("Review the highlighted fields.");
         if (error.code === "INACTIVE_ASSIGNEE") props.refreshOwners();
       } else if (error instanceof ActionRequestError && error.status === 409) {
-        if (base) { setConflict(true); setMessage("This Action changed. Your draft is retained. Reload and review before saving."); }
+        if (error.code === "TICKET_ACTIONS_READ_ONLY") { setMessage("This Ticket is read-only. Reopen a Resolved or Closed Ticket before changing Actions. Your draft is retained."); }
+        else if (base) { setConflict(true); setMessage("This Action changed. Your draft is retained. Reload and review before saving."); }
         else { setExpired(true); setMessage(error.code === "IDEMPOTENCY_KEY_EXPIRED" ? "This request key expired. Check the Action list before starting a new request; the earlier outcome is uncertain." : "This request key conflicts with an earlier request. Check the Action list before starting again."); }
       } else {
         if (!base && submitted && (!(error instanceof ActionRequestError) || error.status >= 500)) setAmbiguous(true);
@@ -82,7 +83,7 @@ export default function ActionTakenForm(props: Props) {
       <p>Action Date/Time: {new Date(fresh.actionAt).toLocaleString()} · Assigned To: {fresh.assignedTo?.name ?? "Unassigned"} · Attachment Notes: {fresh.attachmentNotes ?? "None"}</p>
       <p>Follow-up: {fresh.followUpRequired ? "Required" : "Not required"} · {fresh.followUpNote ?? "No note"}</p>
       {terminalAction(fresh.state) ? <p>This Action is now read-only. Your draft remains visible.</p> : <button type="button" className="btn btn-outline-primary" disabled={pending} onClick={() => { setBase(fresh); setConflict(false); setFresh(undefined); setMessage("Latest version selected. Review all draft fields before saving."); }}>Use reviewed version</button>}</div>}
-    <fieldset disabled={pending || frozen || !!(base && terminalAction(base.state))}>
+    <fieldset disabled={pending || frozen || props.readOnly || !!(base && terminalAction(base.state))}>
       <div className="mb-3"><label htmlFor={`${prefix}-date`} className="form-label">Action Date/Time (required, local time)</label>
         <input id={`${prefix}-date`} type="datetime-local" step="0.001" required className="form-control" value={draft.actionAt} aria-invalid={!!errors.actionAt} aria-describedby={errors.actionAt ? `${prefix}-actionAt-error` : undefined} onChange={e => setDraft({ ...draft, actionAt: e.target.value })} />{fieldError("actionAt")}</div>
       {text("description", "Description", true)}{text("result", "Result", draft.state === "COMPLETED")}
@@ -95,7 +96,7 @@ export default function ActionTakenForm(props: Props) {
       <label htmlFor={`${prefix}-state`} className="form-label">State</label><select id={`${prefix}-state`} className="form-select" value={draft.state} aria-invalid={invalidState || !!errors.state} aria-describedby={invalidState || errors.state ? `${prefix}-state-error` : undefined} onChange={e => setDraft({ ...draft, state: e.target.value as ActionDraft["state"] })}>{invalidState && <option value={draft.state} disabled>{actionLabels[draft.state]} (no longer allowed — choose a state)</option>}{actionStates(base?.state).map(state => <option key={state} value={state}>{actionLabels[state]}</option>)}</select>{invalidState ? <div id={`${prefix}-state-error`} className="text-danger" role="alert">The saved state changed. Choose an allowed state; your other draft fields are retained.</div> : fieldError("state")}
     </fieldset>
     {conflict && <button type="button" className="btn btn-outline-primary mt-3 me-2" disabled={pending} onClick={() => void reload()}>Reload latest Action</button>}
-    <button type="submit" className="btn btn-success mt-3 me-2" disabled={pending || conflict || expired || invalidState || !!(base && terminalAction(base.state))}>{pending ? "Saving…" : ambiguous ? "Retry original request" : "Save Action"}</button>
+    <button type="submit" className="btn btn-success mt-3 me-2" disabled={pending || conflict || expired || invalidState || (props.readOnly && !ambiguous) || !!(base && terminalAction(base.state))}>{pending ? "Saving…" : ambiguous ? "Retry original request" : "Save Action"}</button>
     <button type="button" className="btn btn-outline-secondary mt-3" disabled={pending} onClick={props.onCancel}>Cancel</button>
   </form>;
 }

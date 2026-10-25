@@ -108,7 +108,7 @@
 ### PATCH `/api/staff/tickets/:id/status` (existing Lab 3 route, extended)
 **Roles:** Per status matrix in specification.  
 **Request (existing Lab 3-compatible shape):** `{ "status": "RESOLVED", "expectedStatus": "IN_PROGRESS" }`. The existing Lab 3 endpoint accepts `{ "status": "WAITING_FOR_REQUESTER" }`; `expectedStatus` is optional and additive; do not send `reason` on this endpoint; do not require `version` from legacy callers. If an optional version is later added, its absence must remain valid.  
-**Response 200:** `{ "ticket": { "id": 105, "status": "RESOLVED", "updatedAt": "..." } }`.  
+**Response 200:** `{ "id": 105, "status": "RESOLVED", "ownerId": null }`.
 **Rules:** transactional transition validation, role authorization, Action completion and follow-up gate; atomic cancellation of unfinished Actions when transitioning to CANCELLED; transactional revalidation of current Ticket status (without mandatory legacy version field); log actor/old/new status in append-only history; if optional `expectedStatus` differs from current status return 409 `STALE_UPDATE`. Requester apparent-resolution action is handled by existing Lab 3 API, and MUST NOT directly call this status update to resolve.  
 **Errors:** 401, 403, 404, 409, 422, 500.
 
@@ -166,3 +166,15 @@ Existing Lab 2/3 `/api/auth/*`, Ticket, Attachment, Public Comment, Internal Not
 - [ ] Confirm Action state, assignee, version, history and resolution gate with team.
 - [ ] Confirm time window and dashboard metric set with specification agent.
 
+
+### Issue 5 — follow-up satisfaction and Action write restrictions
+
+POST `/api/tickets/:ticketId/actions/:actionId/follow-up-resolution` requires authenticated active IT Staff/Administrator, completed password setup and the existing write Origin check. Body: `{ "version": 3, "outcome": "Verified service restored" }`. Only these fields are accepted; version is a positive integer and outcome is a nonblank string. No additional character/word minimum or maximum is introduced. The Action must be COMPLETED with required follow-up.
+
+First success: 201 `{ "followUpResolution": { "outcome": "Verified service restored", "actor": { "id": 9, "name": "Staff" }, "occurredAt": "ISO timestamp" } }`; identical repeat: 200 with the same object. An exclusive Ticket lock prevents duplicate events. The Action row is unchanged. Errors use existing `{ "error": "CODE", "fields"?: {...} }`: 401 authentication, 403 permission/Origin/password setup, 404 NOT_FOUND, 422 VALIDATION_ERROR (invalid body or unsuitable Action), 409 STALE_UPDATE, 409 FOLLOW_UP_ALREADY_SATISFIED (different outcome), 409 TICKET_ACTIONS_READ_ONLY.
+
+Action resources add nullable `followUpResolution` with the shape above. Existing saved creation responses may predate this additive field. Only authorized Ticket readers receive it. No additional GET endpoint is introduced.
+
+New Action POST, PATCH and follow-up satisfaction return 409 TICKET_ACTIONS_READ_ONLY on RESOLVED, CLOSED or CANCELLED Tickets. Existing creation idempotency lookup/replay and expiry rules run before this restriction; no new write is performed by replay. Follow-up satisfaction itself is rejected on a restricted Ticket, including repeats; reopen first if permitted.
+
+The existing Ticket status PATCH accepts `{ "status": "RESOLVED", "expectedStatus": "IN_PROGRESS" }` or the legacy `{ "status": "RESOLVED" }`. `expectedStatus` uses the existing Ticket enum; invalid values return 400 VALIDATION_FAILED and mismatch returns 409 STALE_UPDATE. The flat success response remains exactly `{id,status,ownerId}`. Resolution failure returns 422 RESOLUTION_BLOCKED. Existing transition/authorization errors and the Lab 3 transition matrix are unchanged.

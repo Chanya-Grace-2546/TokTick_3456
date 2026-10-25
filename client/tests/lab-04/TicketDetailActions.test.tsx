@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter, Routes, Route } from "react-router-dom";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter, Routes, Route, Link } from "react-router-dom";
 import StaffTicketDetail from "../../src/pages/StaffTicketDetail.js";
 import TicketDetail from "../../src/pages/TicketDetail.js";
 import { action, owners, page, staff } from "./helpers/actionFixture.js";
@@ -16,7 +16,9 @@ const detail = { id: 42, ticketNumber: "TKT-42", summary: "Existing Wi-Fi Ticket
 let fetcher: ReturnType<typeof vi.fn>;
 let postStatus = 0, patchStatus = 0, actionGetStatus = 0, summaryStatus = 0;
 let posted = false, inactive = false;
+let ticketStatusError = "";
 beforeEach(() => {
+  ticketStatusError = "";
   auth.role = "IT_STAFF"; postStatus = 0; patchStatus = 0; actionGetStatus = 0; summaryStatus = 0; posted = false; inactive = false;
   fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = new URL(String(input)).pathname;
@@ -26,6 +28,7 @@ beforeEach(() => {
       if (posted && summaryStatus) return new Response(JSON.stringify({ error: "UNEXPECTED_ERROR" }), { status: summaryStatus });
       body = detail;
     }
+    else if (path === "/api/staff/tickets/42/status" && ticketStatusError) return new Response(JSON.stringify({ error: ticketStatusError }), { status: ticketStatusError === "STALE_UPDATE" ? 409 : 422 });
     else if (path.startsWith("/api/staff/tickets/42/")) body = { id: 42, owner: owners[0], itPriority: "LOW", status: "IN_PROGRESS", ownerId: 8 };
     else if (path === "/api/tickets/42") body = { ...detail, category: "Network", relatedSystem: "Wi-Fi" };
     else if (path === "/api/tickets/42/comments") body = init?.method === "POST" ? detail.publicComments[0] : { items: detail.publicComments };
@@ -52,7 +55,7 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 function renderDetail(requester = false) {
   return render(<MemoryRouter initialEntries={[requester ? "/tickets/42" : "/staff/tickets/42"]}><Routes>
-    <Route path="/staff/tickets/:id" element={<StaffTicketDetail />} /><Route path="/tickets/:id" element={<TicketDetail />} />
+    <Route path="/staff/tickets/:id" element={<><Link to="/staff/tickets/43">Open other Ticket</Link><StaffTicketDetail /></>} /><Route path="/tickets/:id" element={<TicketDetail />} />
   </Routes></MemoryRouter>);
 }
 describe("Ticket Detail Actions integration (AC-15/22/33/42)", () => {
@@ -154,4 +157,59 @@ describe("Ticket Detail Actions integration (AC-15/22/33/42)", () => {
     expect(screen.queryByText("Checked router")).not.toBeInTheDocument();
   });
 
+});
+
+describe("Issue 5 status recovery integration", () => {
+  it("retains Action drafts and requires explicit Ticket status review after a stale update", async () => {
+    renderDetail(); fireEvent.click(await screen.findByRole("button", { name: "Add Action" }));
+    fireEvent.change(screen.getByLabelText("Description (required)"), { target: { value: "Keep my draft" } });
+    ticketStatusError = "STALE_UPDATE";
+    fireEvent.change(document.getElementById("staff-status")!, { target: { value: "IN_PROGRESS" } });
+    fireEvent.click(screen.getByRole("button", { name: "Change Status" }));
+    const reload = await screen.findByRole("button", { name: "Reload and Review Ticket Status" });
+    expect(screen.getByLabelText("Description (required)")).toHaveValue("Keep my draft");
+    fireEvent.click(screen.getByRole("button", { name: "Change Status" }));
+    expect(fetcher.mock.calls.filter(([url]) => String(url).endsWith("/status"))).toHaveLength(1);
+    fireEvent.click(reload); await screen.findByText("Current Ticket status loaded. Review and select a permitted transition before submitting.");
+    expect(screen.getByLabelText("Description (required)")).toHaveValue("Keep my draft");
+    const call = fetcher.mock.calls.find(([url]) => String(url).endsWith("/status"))!;
+    expect(JSON.parse(call[1].body)).toEqual({ status: "IN_PROGRESS", expectedStatus: "OPEN" });
+  });
+  it("shows actionable resolution gate feedback without losing Action drafts", async () => {
+    vi.spyOn(window, "confirm").mockReturnValueOnce(true);
+    renderDetail(); fireEvent.click(await screen.findByRole("button", { name: "Edit Action 31" }));
+    fireEvent.change(screen.getByLabelText("Description (required)"), { target: { value: "Still working" } });
+    ticketStatusError = "RESOLUTION_BLOCKED";
+    fireEvent.change(document.getElementById("staff-status")!, { target: { value: "RESOLVED" } });
+    fireEvent.click(screen.getByRole("button", { name: "Change Status" }));
+    await screen.findByText("Complete all non-cancelled Actions and record outstanding follow-up outcomes before resolving this Ticket.");
+    expect(screen.getByLabelText("Description (required)")).toHaveValue("Still working");
+  });
+});
+
+it("ignores delayed status recovery after navigation and retains the new Ticket's Action draft", async () => {
+  const original = fetcher.getMockImplementation()!;
+  let release!: (value: Response) => void;
+  let recovering = false;
+  fetcher.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = new URL(String(input)).pathname;
+    if (path === "/api/staff/tickets/42" && recovering) return new Promise<Response>(resolve => { release = resolve; });
+    if (path === "/api/staff/tickets/43") return new Response(JSON.stringify({ ...detail, id: 43, ticketNumber: "TKT-43" }));
+    if (path === "/api/tickets/43/actions") return new Response(JSON.stringify({ ...page, items: [], total: 0 }));
+    return original(input, init);
+  });
+  renderDetail(); await screen.findByText("Checked router"); ticketStatusError = "STALE_UPDATE";
+  fireEvent.change(document.getElementById("staff-status")!, { target: { value: "IN_PROGRESS" } });
+  fireEvent.click(screen.getByRole("button", { name: "Change Status" }));
+  recovering = true; fireEvent.click(await screen.findByRole("button", { name: "Reload and Review Ticket Status" }));
+  await waitFor(() => expect(release).toBeDefined());
+  fireEvent.click(screen.getByRole("link", { name: "Open other Ticket" }));
+  await screen.findByText("TKT-43");
+  expect(screen.queryByRole("button", { name: "Reload and Review Ticket Status" })).not.toBeInTheDocument();
+  fireEvent.click(await screen.findByRole("button", { name: "Add Action" }));
+  fireEvent.change(screen.getByLabelText("Description (required)"), { target: { value: "Ticket B draft" } });
+  await act(async () => { release(new Response(JSON.stringify({ ...detail, status: "IN_PROGRESS" }))); });
+  await waitFor(() => expect(screen.getByText("TKT-43")).toBeInTheDocument());
+  expect(screen.getByLabelText("Description (required)")).toHaveValue("Ticket B draft");
+  expect(screen.queryByText("TKT-42")).not.toBeInTheDocument();
 });

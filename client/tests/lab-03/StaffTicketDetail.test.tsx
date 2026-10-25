@@ -307,7 +307,8 @@ describe("Lab 3 Issue 6 — Staff Ticket Detail", () => {
     await waitFor(() => {
       expect(api.updateStaffTicketStatus).toHaveBeenCalledWith(
         42,
-        "IN_PROGRESS"
+        "IN_PROGRESS",
+        "OPEN"
       );
     });
   });

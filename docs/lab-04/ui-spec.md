@@ -130,3 +130,11 @@ Reuse existing component locations where appropriate; keep new Lab 4 tests under
 - Staff status PATCH may include optional `expectedStatus` from the loaded Ticket. A 409 `STALE_UPDATE` preserves form state and prompts refresh; old clients sending `{status}` still work.
 - Requesters see all Action Taken fields for their owned Tickets. Internal Notes remain private.
 - Existing Lab 3 pages and deep links remain accessible; dashboard navigation is additive except for Requester/Staff default landing redirects.
+
+### Issue 5 — workflow and follow-up feedback
+
+Staff Ticket Detail sends optional expectedStatus with status changes. A stale status update retains Action drafts and requires explicit reload/review before another status submission; no automatic retry occurs. Resolution-blocked feedback explains that all non-cancelled Actions must be completed and required follow-up satisfied. Successful status transitions refresh Actions without remounting their drafts.
+
+Completed Actions with outstanding required follow-up offer Staff/Admin a compact Record Follow-Up Outcome form. A required nonblank outcome creates an audited history event; it does not edit the completed Action. Show the recorded outcome, actor and time to authorized readers, including the Ticket requester. No new text limit applies. Ambiguous failures retain the original outcome/version for retry. Requesters never receive this write control.
+
+RESOLVED, CLOSED and CANCELLED Tickets show Actions as read-only; retain existing drafts disabled rather than discarding them. Saved ambiguous creation retries retain their original key/body for safe replay. Reopening restores write controls for nonterminal Actions. Completed and Cancelled Actions always remain immutable. Existing comments, Internal Notes, assignment, priority and attachment behavior is preserved.

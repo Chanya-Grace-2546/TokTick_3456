@@ -81,6 +81,7 @@ export function useAdminDatabase() {
 
   beforeEach(async () => {
     await database.verify();
+    await prisma.ticketStatusHistory.deleteMany();
     await prisma.internalNote.deleteMany();
     await prisma.publicComment.deleteMany();
     await prisma.attachment.deleteMany();

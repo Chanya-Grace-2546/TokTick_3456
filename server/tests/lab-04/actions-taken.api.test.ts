@@ -42,7 +42,7 @@ describe("Action API: creation, visibility and audit (API-01/02/04, AUTH-01/03)"
     const action = await created({ assignedToUserId: admin.user.id, attachmentNotes: "See photo" });
     expect(action).toMatchObject({ ticketId: ticket.id, state: "PLANNED", version: 1, result: null,
       performedBy: { id: staff.user.id, name: staff.user.name }, assignedTo: { id: admin.user.id, name: admin.user.name } });
-    expect(Object.keys(action).sort()).toEqual(["id", "ticketId", "actionAt", "description", "result", "performedBy", "assignedTo", "followUpRequired", "followUpNote", "attachmentNotes", "state", "version", "createdAt", "updatedAt"].sort());
+    expect(Object.keys(action).sort()).toEqual(["id", "ticketId", "actionAt", "description", "result", "performedBy", "assignedTo", "followUpRequired", "followUpNote", "attachmentNotes", "state", "version", "createdAt", "updatedAt", "followUpResolution"].sort());
     expect(await prisma.ticket.findUniqueOrThrow({ where: { id: ticket.id } })).toEqual(before);
     const history = await prisma.actionTakenHistory.findMany({ where: { actionId: action.id } });
     expect(history).toHaveLength(1);
