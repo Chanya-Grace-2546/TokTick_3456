@@ -1,3 +1,4 @@
+import StaffDashboard from "./pages/StaffDashboard.js";
 import {
   Navigate,
   Route,
@@ -63,7 +64,7 @@ function HomeRedirect() {
   }
 
   if (user.role === "IT_STAFF") {
-    return <Navigate to="/staff/tickets" replace />;
+    return <Navigate to="/staff/dashboard" replace />;
   }
 
   return <Navigate to="/admin/users" replace />;
@@ -81,6 +82,7 @@ export default function App() {
     <AuthProvider>
       <AppShell>
         <Routes>
+          <Route path="/staff/dashboard" element={<AuthGuard roles={["IT_STAFF", "ADMINISTRATOR"]}><StaffDashboard /></AuthGuard>} />
           <Route path="/admin/users" element={<AuthGuard><AdministratorPage /></AuthGuard>} />
           <Route
             path="/"

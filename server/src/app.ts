@@ -1,3 +1,5 @@
+import { staffDashboard } from "./staffDashboard.js";
+import { openTickets, ticketsWithMyActions } from "./staffTicketFilters.js";
 import { transitionTicket, validateTicketTransition } from "./ticketWorkflow.js";
 import { ActionError } from "./validateActionTaken.js";
 import express, { Request, Response } from "express";
@@ -431,6 +433,8 @@ app.get(
   }
 );
 
+app.use("/api/dashboard/staff", staffDashboard);
+
 app.get(
   "/api/staff/tickets",
   requireAuth,
@@ -463,6 +467,10 @@ app.get(
         status: query.status,
         ownerId: query.owner === "unassigned" ? null : query.owner === "me" ? req.authUser!.id : query.owner,
       };
+      where.AND = [
+        ...(query.statusGroup ? [openTickets()] : []),
+        ...(query.myAction ? [ticketsWithMyActions(req.authUser!.id)] : []),
+      ];
       if (query.search) {
         const match = { contains: query.search, mode: "insensitive" as const };
         where.OR = [

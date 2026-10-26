@@ -178,3 +178,9 @@ Action resources add nullable `followUpResolution` with the shape above. Existin
 New Action POST, PATCH and follow-up satisfaction return 409 TICKET_ACTIONS_READ_ONLY on RESOLVED, CLOSED or CANCELLED Tickets. Existing creation idempotency lookup/replay and expiry rules run before this restriction; no new write is performed by replay. Follow-up satisfaction itself is rejected on a restricted Ticket, including repeats; reopen first if permitted.
 
 The existing Ticket status PATCH accepts `{ "status": "RESOLVED", "expectedStatus": "IN_PROGRESS" }` or the legacy `{ "status": "RESOLVED" }`. `expectedStatus` uses the existing Ticket enum; invalid values return 400 VALIDATION_FAILED and mismatch returns 409 STALE_UPDATE. The flat success response remains exactly `{id,status,ownerId}`. Resolution failure returns 422 RESOLUTION_BLOCKED. Existing transition/authorization errors and the Lab 3 transition matrix are unchanged.
+
+### Issue 6 — approved dashboard implementation alignment
+
+GET /api/dashboard/staff retains the response documented in §3. Status buckets contain all eight known enums; byPriority includes LOW/MEDIUM/HIGH even when zero. Breakdowns cover all accessible Tickets without open-status/date restrictions. Recent Tickets alone uses the inclusive seven-day UTC window and updatedAt DESC, id DESC; no extra response fields or dashboard filters are introduced. Calculations use one read-consistent database snapshot.
+
+Existing GET /api/staff/tickets additionally accepts statusGroup=open and myAction=true. Other values, repeated/structured values and unknown filters retain 400 INVALID_QUERY with safe field errors. Valid filters combine with AND semantics; an incompatible status/open-group combination returns zero matches. Existing sort choices, id ASC tie-break and the {items,page,pageSize,totalItems,totalPages} envelope remain unchanged. The requester-side additions documented elsewhere are reserved for Issue 7.
