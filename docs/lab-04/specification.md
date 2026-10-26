@@ -122,7 +122,7 @@ Automatic SLA/escalation, external notifications, inventory/purchasing, timeshee
 | BR-14 | A stale `version` must yield HTTP 409 and must not modify the record. |
 | BR-15 | Dashboard data is scoped on the server to the authenticated user/role, never a client-supplied user ID. |
 | BR-16 | Dashboard empty counts are `0`; recent arrays are `[]`; no matching data is not an error. |
-| BR-17 | Ticket list/detail ordering is deterministic: descending `updatedAt`, then descending `id`; Actions: ascending `actionAt`, then ascending `id`. |
+| BR-17 | Dashboard Recent Tickets ordering is descending `updatedAt`, then descending `id`. Compatibility exception: the existing Lab 3 Staff Queue keeps its selected sort and `id ASC` tie-break; Issue 6 does not change requester list ordering. Actions: ascending `actionAt`, then ascending `id`. |
 | BR-18 | Duplicate submissions must be prevented by disabled pending controls and safe server retry handling; clients may send an idempotency key for Action creation. |
 | BR-19 | Requesters can view all Action Taken fields on their own Tickets. Internal Notes remain a separate staff-private resource. |
 | BR-20 | Legacy Tickets and related Users, Attachments, Public Comments and Internal Notes must survive migration unchanged. |
@@ -332,3 +332,9 @@ The existing Lab 3 Ticket transition matrix is unchanged. RESOLVED and CLOSED ca
 Ticket status changes lock the Ticket row exclusively before revalidating status, resolution eligibility, cancellation and history in one transaction. Action creation/editing takes a shared Ticket lock; follow-up satisfaction takes an exclusive Ticket lock, serializing duplicate outcomes and resolution checks. Optional `expectedStatus` rejects stale status requests; legacy requests remain accepted. Cancellation changes only PLANNED/IN_PROGRESS Actions, increments each version and appends before/after history together with Ticket status history. Any failure rolls back all writes.
 
 The existing history JSON supports distinct events without a schema change: beforeJson is the unchanged completed Action snapshot; afterJson is that snapshot plus `event: {type: "FOLLOW_UP_SATISFIED", schemaVersion: 1, outcome: string}`. The actor and occurrence time use existing history columns. Only matching before/after snapshots for the same completed Action/version satisfy required follow-up. Simultaneous identical requests produce one event; an identical repeat returns the existing result and a different outcome conflicts.
+
+### Issue 6 — approved dashboard scope and compatibility
+
+Status and IT Priority breakdowns cover all authorized Tickets, including terminal statuses and records older than seven days. Only Recent Tickets uses the rolling seven-day interval. Headline ownership/unassigned/urgent counts use the five open-work statuses; Tickets with My Actions uses assigned PLANNED/IN_PROGRESS Action existence without an additional Ticket-status restriction. Staff/Admin operational visibility reuses the existing shared Queue scope.
+
+Issue 6 adds only the staff dashboard and staff Queue filters. Requester dashboard, requester list filter extensions and requester landing changes remain Issue 7. Staff lands on /staff/dashboard; Administrator still lands on /admin/users and can navigate to the staff dashboard. Staff/Admin receive no Create Ticket control because the existing creation API is Requester-only. No schema or migration changes are required.

@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Category, Priority, StaffOwner, StaffQueueError, StaffQueueItem,
   StaffQueueParams, StaffQueueResponse, StaffQueueSort, StaffTicketStatus,
@@ -45,7 +45,21 @@ function Updated({ date }: { date: string }) {
 export default function StaffTicketQueue() {
   const { refreshUser } = useAuth();
   const navigate = useNavigate();
-  const [query, setQuery] = useState<StaffQueueParams>(DEFAULT_QUERY);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const query = useMemo(() => {
+    const values: Record<string, unknown> = Object.assign(Object.create(null), DEFAULT_QUERY);
+    for (const [key, value] of searchParams) {
+      values[key] = ["page", "pageSize", "category"].includes(key) || (key === "owner" && /^\d+$/.test(value))
+        ? (/^\d+$/.test(value) ? Number(value) : value) : key === "myAction" && value === "true" ? true : value;
+    }
+    return values as StaffQueueParams;
+  }, [searchParams]);
+  function setQuery(next: StaffQueueParams | ((current: StaffQueueParams) => StaffQueueParams)) {
+    const values = typeof next === "function" ? next(query) : next;
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(values)) if (value !== undefined && value !== "") params.set(key, String(value));
+    setSearchParams(params);
+  }
   const [data, setData] = useState<StaffQueueResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
@@ -68,7 +82,9 @@ export default function StaffTicketQueue() {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetchStaffTickets(query).then(result => {
+    const invalid = Object.fromEntries([...searchParams.keys()].filter(key => searchParams.getAll(key).length !== 1 || (key !== "search" && searchParams.get(key) === "")).map(key => [key, "Supply one valid value."]));
+    const request = Object.keys(invalid).length ? Promise.reject(new StaffQueueError(400, "INVALID_QUERY", invalid)) : fetchStaffTickets(query);
+    request.then(result => {
       if (cancelled) return;
       setData(result);
       setLoading(false);
@@ -103,7 +119,7 @@ export default function StaffTicketQueue() {
     setQuery(current => ({ ...current, ...values, page: 1 }));
   }
 
-  const hasFilters = Boolean(query.search || query.category || query.requestedPriority || query.itPriority || query.status || query.owner);
+  const hasFilters = Object.entries(query).some(([key, value]) => !["page", "pageSize", "sortBy", "sortDir"].includes(key) && value !== undefined && value !== "");
   const fieldErrors = error instanceof StaffQueueError ? error.fields : {};
   const errorMessage = error instanceof StaffQueueError && error.code === "FORBIDDEN"
     ? "You do not have permission to view the ticket queue."
@@ -138,6 +154,7 @@ export default function StaffTicketQueue() {
           </div>
         </div>
 
+        {(query.statusGroup || query.myAction) && <p className="mt-3 mb-0" role="status">Dashboard filters: {query.statusGroup ? "Open-work Tickets" : ""}{query.statusGroup && query.myAction ? " · " : ""}{query.myAction ? "Tickets with my assigned unfinished Actions" : ""}</p>}
         {filtersError && <div role="alert" className="mt-3"><span>Could not load queue filters.</span> <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => setFiltersRetry(n => n + 1)}>Retry filters</button></div>}
 
         <div id="queue-filters" hidden={!filtersOpen}>

@@ -1,9 +1,11 @@
 import { Priority, TicketStatus } from "@prisma/client";
 
 const SORT_FIELDS = ["ticketNumber", "createdAt", "updatedAt", "requestedPriority", "itPriority", "status"] as const;
-const QUERY_FIELDS = ["search", "category", "requestedPriority", "itPriority", "status", "owner", "sortBy", "sortDir", "page", "pageSize"];
+const QUERY_FIELDS = ["statusGroup", "myAction", "search", "category", "requestedPriority", "itPriority", "status", "owner", "sortBy", "sortDir", "page", "pageSize"];
 
 interface StaffQueueQuery {
+  statusGroup?: "open";
+  myAction?: true;
   search?: string;
   category?: number;
   requestedPriority?: Priority;
@@ -60,6 +62,8 @@ export function validateStaffQueueQuery(query: Record<string, unknown>):
   const owner = ownerText === "me" || ownerText === "unassigned" ? ownerText : positiveInteger("owner");
 
   const value: StaffQueueQuery = {
+    statusGroup: choice("statusGroup", ["open"] as const),
+    myAction: choice("myAction", ["true"] as const) === "true" ? true : undefined,
     search: text("search")?.trim(),
     category: positiveInteger("category"),
     requestedPriority: choice("requestedPriority", Object.values(Priority)),

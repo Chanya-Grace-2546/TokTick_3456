@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useNavigate } from "react-router-dom";
 import StaffTicketQueue from "../../src/pages/StaffTicketQueue.js";
 import { AuthProvider } from "../../src/context/AuthContext.js";
 import * as api from "../../src/api.js";
@@ -168,5 +168,25 @@ describe("Staff Ticket Queue (UI-06)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Retry filters" }));
     await waitFor(() => expect(api.fetchStaffOwners).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(screen.queryByText("Could not load queue filters.")).not.toBeInTheDocument());
+  });
+});
+
+describe("Issue 6 dashboard Queue drill-downs", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks(); vi.spyOn(api,"getMe").mockResolvedValue({id:1,name:"Staff",email:"staff@example.test",role:"IT_STAFF",isActive:true,mustChangePassword:false});
+    vi.spyOn(api,"fetchStaffTickets").mockResolvedValue(response); vi.spyOn(api,"fetchCategories").mockResolvedValue([]); vi.spyOn(api,"fetchStaffOwners").mockResolvedValue([]);
+  });
+  function HistoryControls(){const navigate=useNavigate();return <><button onClick={()=>navigate(-1)}>Browser Back</button><button onClick={()=>navigate(1)}>Browser Forward</button></>;}
+  it("applies dashboard URL filters, preserves them through paging, and restores back/forward",async()=>{
+    render(<MemoryRouter initialEntries={["/staff/tickets?owner=me&statusGroup=open&myAction=true"]}><AuthProvider><HistoryControls/><StaffTicketQueue/></AuthProvider></MemoryRouter>);
+    await screen.findByRole("table"); expect(api.fetchStaffTickets).toHaveBeenLastCalledWith(expect.objectContaining({owner:"me",statusGroup:"open",myAction:true,page:1}));
+    fireEvent.click(screen.getByRole("button",{name:"Next"})); await waitFor(()=>expect(api.fetchStaffTickets).toHaveBeenLastCalledWith(expect.objectContaining({page:2,statusGroup:"open",myAction:true})));
+    fireEvent.click(screen.getByRole("button",{name:"Browser Back"})); await waitFor(()=>expect(api.fetchStaffTickets).toHaveBeenLastCalledWith(expect.objectContaining({page:1,statusGroup:"open"})));
+    fireEvent.click(screen.getByRole("button",{name:"Browser Forward"})); await waitFor(()=>expect(api.fetchStaffTickets).toHaveBeenLastCalledWith(expect.objectContaining({page:2,statusGroup:"open"})));
+    fireEvent.click(screen.getByRole("button",{name:"Clear filters"})); await waitFor(()=>expect(api.fetchStaffTickets).toHaveBeenLastCalledWith(expect.not.objectContaining({statusGroup:"open"})));
+  });
+  it("refuses repeated URL filters instead of silently broadening the list",async()=>{
+    render(<MemoryRouter initialEntries={["/staff/tickets?statusGroup=open&statusGroup=open"]}><AuthProvider><StaffTicketQueue/></AuthProvider></MemoryRouter>);
+    await screen.findByRole("alert"); expect(api.fetchStaffTickets).not.toHaveBeenCalled();
   });
 });

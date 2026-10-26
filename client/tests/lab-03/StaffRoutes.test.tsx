@@ -1,5 +1,6 @@
+import { dashboardFixture } from "../lab-04/helpers/staffDashboardFixture.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import App from "../../src/App.js";
 import * as api from "../../src/api.js";
@@ -10,15 +11,16 @@ const staff: api.AuthUser = { id: 1, name: "Staff", email: "staff@example.test",
 describe("Staff Queue routes", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.spyOn(api, "fetchStaffDashboard").mockResolvedValue(dashboardFixture);
     vi.spyOn(api, "getMe").mockResolvedValue(staff);
     vi.spyOn(api, "fetchStaffTickets").mockResolvedValue({ items: [], page: 1, pageSize: 10, totalItems: 0, totalPages: 1 });
     vi.spyOn(api, "fetchStaffOwners").mockResolvedValue([]);
     vi.spyOn(api, "fetchCategories").mockResolvedValue([]);
     vi.spyOn(api, "fetchTickets").mockResolvedValue({ items: [], page: 1, pageSize: 10, totalItems: 0, totalPages: 1, noResults: false });
   });
-  it("lands IT Staff on the Queue", async () => {
+  it("lands IT Staff on the dashboard", async () => {
     renderRoute("/");
-    expect(await screen.findByRole("heading", { name: "Ticket Queue" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "IT Staff Dashboard" })).toBeInTheDocument();
   });
   it("permits Administrator direct access without default queue navigation", async () => {
     vi.mocked(api.getMe).mockResolvedValue({ ...staff, role: "ADMINISTRATOR" });
@@ -51,4 +53,21 @@ describe("Staff Queue routes", () => {
     await screen.findByRole("button", { name: /sign in/i });
     expect(screen.queryByRole("link", { name: "Ticket Queue" })).not.toBeInTheDocument();
   });
+});
+
+it("rejects a Requester dashboard request without fetching staff metrics", async () => {
+  vi.restoreAllMocks();
+  vi.spyOn(api,"getMe").mockResolvedValue({...staff,role:"REQUESTER"});
+  const dashboard=vi.spyOn(api,"fetchStaffDashboard"); vi.spyOn(api,"fetchTickets").mockResolvedValue({items:[],totalItems:0,page:1,pageSize:10,totalPages:1,noResults:false});
+  renderRoute("/staff/dashboard"); await screen.findByRole("heading",{name:"My Tickets"}); expect(dashboard).not.toHaveBeenCalled();
+});
+
+it.each(["IT_STAFF","ADMINISTRATOR"] as const)("permits %s dashboard access and desktop/mobile navigation", async role => {
+  vi.restoreAllMocks();
+  vi.spyOn(api,"getMe").mockResolvedValue({...staff,role}); vi.spyOn(api,"fetchStaffDashboard").mockResolvedValue(dashboardFixture);
+  renderRoute("/staff/dashboard"); await screen.findByRole("heading",{name:"IT Staff Dashboard"});
+  expect(screen.getByRole("link",{name:"Dashboard"})).toHaveAttribute("href","/staff/dashboard");
+  fireEvent.click(screen.getByRole("button",{name:"Toggle navigation"}));
+  expect(screen.getAllByRole("link",{name:"Dashboard"})).toHaveLength(2);
+  expect(screen.queryByRole("link",{name:/Create Ticket/i})).not.toBeInTheDocument();
 });

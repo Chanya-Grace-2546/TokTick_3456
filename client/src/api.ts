@@ -236,6 +236,8 @@ export type StaffTicketStatus = "NEW" | "OPEN" | "IN_PROGRESS" | "WAITING_FOR_RE
 export type StaffQueueSort = "ticketNumber" | "createdAt" | "updatedAt" | "requestedPriority" | "itPriority" | "status";
 
 export interface StaffQueueParams {
+  statusGroup?: "open";
+  myAction?: true;
   search?: string;
   category?: number;
   requestedPriority?: Priority;
@@ -1023,4 +1025,16 @@ export function updateAction(ticketId: number, actionId: number, body: Partial<A
 
 export function recordFollowUpResolution(ticketId: number, actionId: number, body: { version: number; outcome: string }): Promise<{ followUpResolution: FollowUpResolution }> {
   return actionRequest(`${ticketId}/actions/${actionId}/follow-up-resolution`, "POST", body);
+}
+
+export interface StaffDashboardData {
+  asOf: string;
+  metrics: { unassignedTickets: number; myOwnedTickets: number; ticketsWithMyActions: number; urgentOpenTickets: number };
+  byStatus: Record<StaffTicketStatus, number>;
+  byPriority: { priority: Priority; count: number }[];
+  recentTickets: { id: number; ticketNumber: string; summary: string; status: StaffTicketStatus; updatedAt: string; href: string }[];
+  drillDown: Record<keyof StaffDashboardData["metrics"], string>;
+}
+export async function fetchStaffDashboard(): Promise<StaffDashboardData> {
+  return readStaffResponse(await fetch(`${API_URL}/api/dashboard/staff`, { credentials: "include" }));
 }

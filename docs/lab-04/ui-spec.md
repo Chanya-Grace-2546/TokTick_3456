@@ -138,3 +138,9 @@ Staff Ticket Detail sends optional expectedStatus with status changes. A stale s
 Completed Actions with outstanding required follow-up offer Staff/Admin a compact Record Follow-Up Outcome form. A required nonblank outcome creates an audited history event; it does not edit the completed Action. Show the recorded outcome, actor and time to authorized readers, including the Ticket requester. No new text limit applies. Ambiguous failures retain the original outcome/version for retry. Requesters never receive this write control.
 
 RESOLVED, CLOSED and CANCELLED Tickets show Actions as read-only; retain existing drafts disabled rather than discarding them. Saved ambiguous creation retries retain their original key/body for safe replay. Reopening restores write controls for nonterminal Actions. Completed and Cancelled Actions always remain immutable. Existing comments, Internal Notes, assignment, priority and attachment behavior is preserved.
+
+### Issue 6 — approved navigation and drill-down alignment
+
+IT Staff lands on /staff/dashboard. Staff/Admin have Dashboard navigation on desktop and mobile; Administrator retains /admin/users as its landing page. No Staff/Admin Create Ticket control is introduced. Requester navigation is unchanged until Issue 7.
+
+Dashboard breakdowns cover all authorized Tickets; the recent list alone covers seven days. Dashboard dates explicitly display Asia/Bangkok. Metric/breakdown links initialize the existing Queue from URL filters; paging, sorting, filter changes and browser back/forward retain the URL state. Active dashboard filters are identified and can be cleared. Queue table/card presentation and legacy sort ties remain unchanged.
