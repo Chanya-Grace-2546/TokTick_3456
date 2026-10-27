@@ -1,3 +1,4 @@
+import { requesterDashboardFixture } from "../lab-04/helpers/requesterDashboardFixture.js";
 import { dashboardFixture } from "../lab-04/helpers/staffDashboardFixture.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
@@ -12,6 +13,7 @@ describe("Staff Queue routes", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.spyOn(api, "fetchStaffDashboard").mockResolvedValue(dashboardFixture);
+    vi.spyOn(api, "fetchRequesterDashboard").mockResolvedValue(requesterDashboardFixture);
     vi.spyOn(api, "getMe").mockResolvedValue(staff);
     vi.spyOn(api, "fetchStaffTickets").mockResolvedValue({ items: [], page: 1, pageSize: 10, totalItems: 0, totalPages: 1 });
     vi.spyOn(api, "fetchStaffOwners").mockResolvedValue([]);
@@ -31,7 +33,7 @@ describe("Staff Queue routes", () => {
   it("rejects a Requester direct route without fetching shared tickets", async () => {
     vi.mocked(api.getMe).mockResolvedValue({ ...staff, role: "REQUESTER" });
     renderRoute("/staff/tickets");
-    await screen.findByRole("heading", { name: "My Tickets" });
+    await screen.findByRole("heading", { name: "My Dashboard" });
     expect(api.fetchStaffTickets).not.toHaveBeenCalled();
   });
   it("redirects signed-out users to Login", async () => {
@@ -58,8 +60,9 @@ describe("Staff Queue routes", () => {
 it("rejects a Requester dashboard request without fetching staff metrics", async () => {
   vi.restoreAllMocks();
   vi.spyOn(api,"getMe").mockResolvedValue({...staff,role:"REQUESTER"});
+  vi.spyOn(api,"fetchRequesterDashboard").mockResolvedValue(requesterDashboardFixture);
   const dashboard=vi.spyOn(api,"fetchStaffDashboard"); vi.spyOn(api,"fetchTickets").mockResolvedValue({items:[],totalItems:0,page:1,pageSize:10,totalPages:1,noResults:false});
-  renderRoute("/staff/dashboard"); await screen.findByRole("heading",{name:"My Tickets"}); expect(dashboard).not.toHaveBeenCalled();
+  renderRoute("/staff/dashboard"); await screen.findByRole("heading",{name:"My Dashboard"}); expect(dashboard).not.toHaveBeenCalled();
 });
 
 it.each(["IT_STAFF","ADMINISTRATOR"] as const)("permits %s dashboard access and desktop/mobile navigation", async role => {

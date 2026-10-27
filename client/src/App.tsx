@@ -1,3 +1,4 @@
+import RequesterDashboard from "./pages/RequesterDashboard.js";
 import StaffDashboard from "./pages/StaffDashboard.js";
 import {
   Navigate,
@@ -57,7 +58,7 @@ function HomeRedirect() {
   ) {
     return (
       <Navigate
-        to="/tickets"
+        to="/dashboard"
         replace
       />
     );
@@ -82,6 +83,7 @@ export default function App() {
     <AuthProvider>
       <AppShell>
         <Routes>
+          <Route path="/dashboard" element={<AuthGuard roles={["REQUESTER"]}><RequesterDashboard /></AuthGuard>} />
           <Route path="/staff/dashboard" element={<AuthGuard roles={["IT_STAFF", "ADMINISTRATOR"]}><StaffDashboard /></AuthGuard>} />
           <Route path="/admin/users" element={<AuthGuard><AdministratorPage /></AuthGuard>} />
           <Route

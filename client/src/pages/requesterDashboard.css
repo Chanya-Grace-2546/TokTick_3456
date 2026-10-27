@@ -1,0 +1,35 @@
+.requester-dashboard .dashboard-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.requester-kpi-note { font-size: .76rem; color: #52655b; margin-top: .3rem; }
+.requester-recent-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.requester-dashboard .dashboard-ticket { grid-template-columns: 30px minmax(0, 1fr) 16px; gap: .4rem .65rem; }
+.requester-dashboard .dashboard-ticket-icon { width: 30px; height: 30px; grid-row: 1 / 3; align-self: start; }
+.requester-dashboard .dashboard-ticket-main { grid-column: 2; }
+.requester-dashboard .dashboard-ticket-arrow { grid-column: 3; grid-row: 1; }
+.requester-dashboard .dashboard-ticket-status { grid-column: 2; grid-row: 2; }
+.requester-dashboard .dashboard-ticket-time { grid-column: 2 / 4; grid-row: 3; flex-direction: row; flex-wrap: wrap; gap: .4rem; }
+@media (max-width: 1023px) { .requester-recent-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 767px) { .requester-dashboard .dashboard-kpis { grid-template-columns: minmax(0, 1fr); } }
+
+/* Compact requester overview; preserve the shared Staff Dashboard. */
+.requester-dashboard .dashboard-toolbar { margin: 1rem 0 1.1rem; }
+.requester-dashboard .dashboard-kpis { gap: .85rem; margin-bottom: 1.1rem; }
+.requester-dashboard .dashboard-kpi { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; column-gap: .8rem; row-gap: .15rem; padding: .95rem 1rem; align-items: center; }
+.requester-dashboard .dashboard-kpi-top { display: contents; }
+.requester-dashboard .dashboard-kpi-icon { grid-column: 1; grid-row: 1 / 4; }
+.requester-dashboard .dashboard-kpi-arrow { grid-column: 3; grid-row: 1 / 4; }
+.requester-dashboard .dashboard-kpi strong { grid-column: 2; grid-row: 1; font-size: 1.8rem; }
+.requester-dashboard .dashboard-kpi-label { grid-column: 2; grid-row: 2; margin: 0; font-weight: 650; }
+.requester-dashboard .requester-kpi-note { grid-column: 2; grid-row: 3; margin: .1rem 0 0; line-height: 1.4; }
+.requester-dashboard .dashboard-panel-heading { padding-bottom: .8rem; border-bottom: 1px solid #e8edea; }
+.requester-dashboard .dashboard-panel h2 { color: var(--dashboard-green); }
+.requester-empty { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 1.4rem 1rem; border-radius: 8px; background: linear-gradient(145deg, var(--dashboard-pale), var(--dashboard-muted)); }
+.requester-empty-icon { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; background: white; color: var(--dashboard-green); font-size: 1.35rem; margin-bottom: .7rem; }
+.requester-empty h3 { font-size: .9rem; color: #354c3f; font-weight: 650; margin: 0 0 .4rem; }
+.requester-empty p { max-width: 34ch; font-size: .78rem; line-height: 1.6; color: #52655b; margin: 0 0 .8rem; }
+.requester-empty a { font-size: .78rem; font-weight: 600; text-decoration: none; border-radius: 3px; }
+.requester-empty a:hover { text-decoration: underline; }
+@media (max-width: 767px) {
+ .requester-dashboard .dashboard-kpi { padding: .85rem 1rem; }
+ .requester-dashboard .dashboard-toolbar nav { flex-wrap: wrap; }
+ .requester-empty { padding: 1.2rem .75rem; }
+}

@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { fetchTickets, TicketListItem, Priority } from "../api.js";
+import { useAuth } from "../context/AuthContext.js";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { fetchTickets, TicketListItem, TicketListParams, RequesterApiError, Priority } from "../api.js";
 import { ticketTableHeaderStyle, zenGreen } from "../theme.js";
 
-type ScreenState = "loading" | "error" | "ready";
+type ScreenState = "loading" | "error" | "ready" | "forbidden";
 type SortField = "ticketNumber" | "createdAt" | "updatedAt";
 
 const cardStyle: React.CSSProperties = {
@@ -37,60 +38,40 @@ export default function TicketsPlaceholder() {
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
 
-  const [search, setSearch] = useState("");
-  const [requestedPriority, setRequestedPriority] = useState("");
-  const [currentStatus, setCurrentStatus] = useState("");
-  const [sortBy, setSortBy] = useState<SortField>("createdAt");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
-  const [page, setPage] = useState(1);
-  const [sortMenuOpen, setSortMenuOpen] = useState(false);
-
-  const hasActiveFilters = Boolean(search || requestedPriority || currentStatus);
-
-  useEffect(() => {
-    let cancelled = false;
-    setState("loading");
-
-    fetchTickets({
-      search: search || undefined,
-      requestedPriority: (requestedPriority as Priority) || undefined,
-      currentStatus: currentStatus || undefined,
-      sortBy,
-      sortDir,
-      page,
-    })
-      .then((res) => {
-        if (cancelled) return;
-        setItems(res.items);
-        setTotalPages(res.totalPages);
-        setTotalItems(res.totalItems);
-        setState("ready");
-      })
-      .catch(() => {
-        if (!cancelled) setState("error");
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [search, requestedPriority, currentStatus, sortBy, sortDir, page]);
-
-  function toggleSort(field: SortField) {
-    if (sortBy === field) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setSortBy(field);
-      setSortDir("desc");
-    }
-    setPage(1);
+  const { refreshUser } = useAuth();
+  const [params,setParams] = useSearchParams();
+  const [sortMenuOpen,setSortMenuOpen] = useState(false),[retry,setRetry] = useState(0);
+  const query = useMemo(()=>{
+    const values:Record<string,unknown>=Object.create(null);
+    for(const [key,value] of params) values[key]=key==="category"?Number(value):value;
+    const page=Number(params.get("page")),size=Number(params.get("pageSize"));
+    values.page=Number.isInteger(page)&&page>0?page:1;
+    if(params.has("pageSize"))values.pageSize=Number.isInteger(size)&&size>0?Math.min(size,50):10;
+    values.sortBy=["ticketNumber","createdAt","updatedAt"].includes(params.get("sortBy")??"")?params.get("sortBy"):"createdAt";
+    values.sortDir=params.get("sortDir")==="asc"?"asc":"desc";
+    return values as TicketListParams;
+  },[params]);
+  const search=query.search??"",requestedPriority=query.requestedPriority??"",currentStatus=query.status??query.currentStatus??"";
+  const sortBy=query.sortBy as SortField,sortDir=query.sortDir!,page=query.page!;
+  const hasActiveFilters=Object.entries(query).some(([key,value])=>!["page","pageSize","sortBy","sortDir","requesterId"].includes(key)&&value!==undefined&&value!=="");
+  function change(values:Record<string,string|number|undefined>,resetPage=true){
+    const next=new URLSearchParams(params);
+    for(const [key,value] of Object.entries(values)){if(value===undefined||value==="")next.delete(key);else next.set(key,String(value));}
+    if(resetPage)next.set("page","1");setParams(next);
   }
-
-  function clearFilters() {
-    setSearch("");
-    setRequestedPriority("");
-    setCurrentStatus("");
-    setPage(1);
-  }
+  useEffect(()=>{
+    let cancelled=false;setState("loading");setItems([]);
+    const duplicate=Array.from(params.keys()).some(key=>key!=="requesterId"&&params.getAll(key).length>1);
+    const request=duplicate?Promise.reject(new RequesterApiError(400,"INVALID_QUERY")):fetchTickets(query);
+    void request.then(res=>{if(cancelled)return;setItems(res.items);setTotalPages(res.totalPages);setTotalItems(res.totalItems);setState("ready");}).catch(async error=>{
+      if(cancelled)return;
+      if(error instanceof RequesterApiError&&(error.status===401||error.code==="PASSWORD_CHANGE_REQUIRED")){
+        await refreshUser();if(!cancelled)navigate(error.status===401?"/login":"/change-password",{replace:true});
+      }else if(error instanceof RequesterApiError&&error.status===403)setState("forbidden");else setState("error");
+    });return()=>{cancelled=true;};
+  },[query,retry]);
+  function toggleSort(field:SortField){change({sortBy:field,sortDir:sortBy===field&&sortDir==="desc"?"asc":"desc"});}
+  function clearFilters(){const next=new URLSearchParams({sortBy,sortDir,page:"1"});if(query.pageSize)next.set("pageSize",String(query.pageSize));setParams(next);}
 
   return (
     <div className="container py-5" style={{ maxWidth: 960 }}>
@@ -128,8 +109,7 @@ export default function TicketsPlaceholder() {
               placeholder="Search by ticket number or summary…"
               value={search}
               onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
+                change({search:e.target.value});
               }}
               aria-label="Search tickets"
             />
@@ -140,8 +120,7 @@ export default function TicketsPlaceholder() {
               className="form-select"
               value={requestedPriority}
               onChange={(e) => {
-                setRequestedPriority(e.target.value);
-                setPage(1);
+                change({requestedPriority:e.target.value});
               }}
               aria-label="Filter by priority"
             >
@@ -157,8 +136,7 @@ export default function TicketsPlaceholder() {
               className="form-select"
               value={currentStatus}
               onChange={(e) => {
-                setCurrentStatus(e.target.value);
-                setPage(1);
+                change({currentStatus:e.target.value,status:undefined});
               }}
               aria-label="Filter by status"
             >
@@ -220,11 +198,13 @@ export default function TicketsPlaceholder() {
         </div>
       </div>
 
+      {query.statusGroup && <p role="status">Dashboard filter: Open Tickets</p>}
+      {state === "forbidden" && <p role="alert">You do not have permission to view these Tickets.</p>}
       {state === "loading" && <p role="status">Loading tickets…</p>}
 
       {state === "error" && (
         <p role="alert" className="text-danger">
-          Couldn't load your tickets. Please try again.
+          Couldn't load your tickets. Please try again. <button type="button" className="btn btn-sm btn-outline-success" onClick={()=>setRetry(value=>value+1)}>Retry Tickets</button>
         </p>
       )}
 
@@ -255,6 +235,8 @@ export default function TicketsPlaceholder() {
           </button>
         </div>
       )}
+
+      {state === "ready" && totalItems > 0 && items.length === 0 && <p role="status">No Tickets on this page. <button type="button" className="btn btn-sm btn-outline-success" onClick={()=>change({page:1},false)}>Return to first page</button></p>}
 
       {state === "ready" && items.length > 0 && (
         <>
@@ -447,7 +429,7 @@ export default function TicketsPlaceholder() {
                 type="button"
                 className="btn btn-sm btn-outline-secondary"
                 disabled={page <= 1}
-                onClick={() => setPage((p) => p - 1)}
+                onClick={() => change({page:page-1},false)}
               >
                 Previous
               </button>
@@ -460,7 +442,7 @@ export default function TicketsPlaceholder() {
                 type="button"
                 className="btn btn-sm btn-outline-secondary"
                 disabled={page >= totalPages}
-                onClick={() => setPage((p) => p + 1)}
+                onClick={() => change({page:page+1},false)}
               >
                 Next
               </button>

@@ -1,3 +1,5 @@
+import { requesterDashboard } from "./requesterDashboard.js";
+import { validateRequesterTicketQuery } from "./validateRequesterTicketQuery.js";
 import { staffDashboard } from "./staffDashboard.js";
 import { openTickets, ticketsWithMyActions } from "./staffTicketFilters.js";
 import { transitionTicket, validateTicketTransition } from "./ticketWorkflow.js";
@@ -434,6 +436,7 @@ app.get(
 );
 
 app.use("/api/dashboard/staff", staffDashboard);
+app.use("/api/dashboard/requester", requesterDashboard);
 
 app.get(
   "/api/staff/tickets",
@@ -994,12 +997,6 @@ app.patch(
 // It comes from the authenticated Session (req.authUser.id).
 // BR-08/BR-09 ownership still applies.
 // ---------------------------------------------------------------------------
-const SORTABLE_FIELDS = [
-  "ticketNumber",
-  "createdAt",
-  "updatedAt",
-] as const;
-
 app.get(
   "/api/tickets",
   requireAuth,
@@ -1012,104 +1009,12 @@ app.get(
     const requesterId =
       req.authUser!.id;
 
-    const {
-      search,
-      category,
-      requestedPriority,
-      itPriority,
-      currentStatus,
-    } = req.query as Record<
-      string,
-      string | undefined
-    >;
-
-    // BR-12: default sort createdAt desc. Invalid values fall back silently.
-    const sortBy =
-      SORTABLE_FIELDS.includes(
-        req.query.sortBy as
-          (typeof SORTABLE_FIELDS)[number]
-      )
-        ? (req.query.sortBy as
-            (typeof SORTABLE_FIELDS)[number])
-        : "createdAt";
-
-    const sortDir =
-      req.query.sortDir === "asc"
-        ? "asc"
-        : "desc";
-
-    // BR-13: page default 1, pageSize default 10 capped at 50.
-    // Invalid values fall back to defaults.
-    const pageParsed = Number(
-      req.query.page
-    );
-
-    const page =
-      Number.isInteger(pageParsed) &&
-      pageParsed > 0
-        ? pageParsed
-        : 1;
-
-    const pageSizeParsed = Number(
-      req.query.pageSize
-    );
-
-    const pageSize =
-      Number.isInteger(
-        pageSizeParsed
-      ) && pageSizeParsed > 0
-        ? Math.min(
-            pageSizeParsed,
-            50
-          )
-        : 10;
-
-    const where: Record<
-      string,
-      unknown
-    > = {
-      requesterId,
-    };
-
-    // BR-10: search matches Ticket Number or Summary, case-insensitive.
-    if (search) {
-      where.OR = [
-        {
-          ticketNumber: {
-            contains: search,
-            mode: "insensitive",
-          },
-        },
-        {
-          summary: {
-            contains: search,
-            mode: "insensitive",
-          },
-        },
-      ];
-    }
-
-    // BR-11: filters combine with AND
-    // (each added key is already AND'd by Prisma).
-    if (category) {
-      where.categoryId =
-        Number(category);
-    }
-
-    if (requestedPriority) {
-      where.requestedPriority =
-        requestedPriority;
-    }
-
-    if (itPriority) {
-      where.itPriority =
-        itPriority;
-    }
-
-    if (currentStatus) {
-      where.status =
-        currentStatus;
-    }
+    const parsed = validateRequesterTicketQuery(req.query);
+    if (parsed.fields) { res.status(400).json({ error: "INVALID_QUERY", fields: parsed.fields }); return; }
+    const { search, category, requestedPriority, itPriority, currentStatus, statusGroup, sortBy, sortDir, page, pageSize } = parsed.value!;
+    const where: Prisma.TicketWhereInput = { requesterId, categoryId:category, requestedPriority, itPriority,
+      status:currentStatus, ...(statusGroup ? { AND:[openTickets()] } : {}) };
+    if (search) where.OR = [{ticketNumber:{contains:search,mode:"insensitive"}},{summary:{contains:search,mode:"insensitive"}}];
 
     try {
       const prisma = getPrisma();
@@ -1175,10 +1080,7 @@ app.get(
           totalItems === 0,
       });
     } catch (err) {
-      console.error(
-        "Failed to list tickets:",
-        err
-      );
+      console.error("Failed to list requester Tickets.");
 
       res.status(500).json({
         error: "UNEXPECTED_ERROR",

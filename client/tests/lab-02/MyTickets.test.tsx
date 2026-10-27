@@ -1,3 +1,4 @@
+vi.mock("../../src/context/AuthContext.js",()=>({useAuth:()=>({refreshUser:vi.fn().mockResolvedValue(undefined)})}));
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   render,
