@@ -75,11 +75,11 @@ export default function AppShell({
       >
         <div
           className="container d-flex align-items-center justify-content-between"
-          style={{ height: 56 }}
+          style={{ height: 56, gap: 12 }}
         >
           <Link
             to="/"
-            className="d-flex align-items-center gap-2 text-white text-decoration-none fw-bold"
+            className="d-flex align-items-center gap-2 text-white text-decoration-none fw-bold flex-shrink-0"
           >
             <svg
               width="20"
@@ -107,7 +107,7 @@ export default function AppShell({
             TokTickIT
           </Link>
 
-          <nav className="d-none d-md-flex align-items-center gap-3">
+          <nav className="d-none d-md-flex align-items-center gap-2 flex-shrink-0">
             {(showAdminNav || showStaffNav) && <Link to="/staff/dashboard" className="text-white text-decoration-none px-2 py-1 rounded" aria-current={isActive("/staff/dashboard") ? "page" : undefined} style={{ backgroundColor: isActive("/staff/dashboard") ? zenGreen.secondary : "transparent", fontWeight: 600 }}>Dashboard</Link>}
             {showAdminNav && <Link to="/admin/users" className="text-white text-decoration-none px-2 py-1 rounded" aria-current={isActive("/admin/users") ? "page" : undefined} style={{ backgroundColor: isActive("/admin/users") ? zenGreen.secondary : "transparent", fontWeight: 600 }}>Admin / Users</Link>}
             {showStaffNav && (
@@ -117,6 +117,7 @@ export default function AppShell({
             )}
             {showRequesterNav && (
               <>
+                <Link to="/dashboard" className="text-white text-decoration-none px-2 py-1 rounded" aria-current={isActive("/dashboard") ? "page" : undefined} style={{backgroundColor:isActive("/dashboard")?zenGreen.secondary:"transparent"}}>Dashboard</Link>
                 <Link
                   to="/tickets"
                   className="text-decoration-none px-2 py-1 rounded"
@@ -160,7 +161,8 @@ export default function AppShell({
             )}
           </nav>
 
-          <div className="d-none d-md-block position-relative">
+          <div className="d-none d-md-block position-relative"
+            style={{ minWidth: 0, maxWidth: 220 }}>
             {user ? (
               <>
                 <button
@@ -170,6 +172,10 @@ export default function AppShell({
                     backgroundColor:
                       zenGreen.secondary,
                     color: "white",
+                    maxWidth: "100%",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
                   }}
                   onClick={() =>
                     setMenuOpen(
@@ -177,6 +183,7 @@ export default function AppShell({
                         !value
                     )
                   }
+                  title={user.name}
                   aria-expanded={
                     menuOpen
                   }
@@ -279,6 +286,7 @@ export default function AppShell({
                 )}
                 {showRequesterNav && (
                   <>
+                    <Link to="/dashboard" className="text-white text-decoration-none" aria-current={isActive("/dashboard") ? "page" : undefined} onClick={()=>setMobileNavOpen(false)}>Dashboard</Link>
                     <Link
                       to="/tickets"
                       className="text-white text-decoration-none"

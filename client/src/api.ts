@@ -217,6 +217,8 @@ export interface TicketListResponse {
 }
 
 export interface TicketListParams {
+  status?: StaffTicketStatus;
+  statusGroup?: "open";
   search?: string;
   category?: number;
   requestedPriority?: Priority;
@@ -342,9 +344,7 @@ export async function fetchTickets(
         error: "LOAD_TICKETS_FAILED",
       }));
 
-    throw new Error(
-      body.error ?? "Failed to load tickets"
-    );
+    throw new RequesterApiError(res.status, body.error ?? "LOAD_TICKETS_FAILED", body.fields ?? {});
   }
 
   return res.json();
@@ -1037,4 +1037,20 @@ export interface StaffDashboardData {
 }
 export async function fetchStaffDashboard(): Promise<StaffDashboardData> {
   return readStaffResponse(await fetch(`${API_URL}/api/dashboard/staff`, { credentials: "include" }));
+}
+
+export class RequesterApiError extends Error {
+  constructor(public status:number, public code:string, public fields:FieldErrors={}) { super(code); }
+}
+export interface RequesterDashboardData {
+  asOf:string; recentWindowDays:7;
+  metrics:{openTickets:number;waitingForRequester:number};
+  recentlyUpdated:{id:number;ticketNumber:string;summary:string;status:StaffTicketStatus;updatedAt:string;href:string}[];
+  recentlyResolved:RequesterDashboardData["recentlyUpdated"];
+  drillDown:{openTickets:string;waitingForRequester:string};
+}
+export async function fetchRequesterDashboard():Promise<RequesterDashboardData> {
+  const res=await fetch(`${API_URL}/api/dashboard/requester`,{credentials:"include"});
+  if(!res.ok){const body=await res.json().catch(()=>({}));throw new RequesterApiError(res.status,body.error??"LOAD_DASHBOARD_FAILED",body.fields??{});}
+  return res.json();
 }

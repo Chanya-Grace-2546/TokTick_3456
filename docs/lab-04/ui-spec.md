@@ -144,3 +144,9 @@ RESOLVED, CLOSED and CANCELLED Tickets show Actions as read-only; retain existin
 IT Staff lands on /staff/dashboard. Staff/Admin have Dashboard navigation on desktop and mobile; Administrator retains /admin/users as its landing page. No Staff/Admin Create Ticket control is introduced. Requester navigation is unchanged until Issue 7.
 
 Dashboard breakdowns cover all authorized Tickets; the recent list alone covers seven days. Dashboard dates explicitly display Asia/Bangkok. Metric/breakdown links initialize the existing Queue from URL filters; paging, sorting, filter changes and browser back/forward retain the URL state. Active dashboard filters are identified and can be cleared. Queue table/card presentation and legacy sort ties remain unchanged.
+
+### Issue 7 — Requester Dashboard integration
+
+/dashboard displays My Dashboard, Open Tickets and Waiting for Me cards, and separate Recently Updated/Recently Resolved sections. It reuses Issue 6's polished Zen Green card/row/focus styles with requester-only layout overrides, without redesigning Staff Dashboard. Timestamps explicitly display Asia/Bangkok; each list has its own empty message. There are no requester breakdown charts or privileged Action/Ticket mutation controls. Existing My Tickets and Create Ticket remain available.
+
+Requester Dashboard navigation is available on desktop/mobile and is the requester landing route. Staff/Admin landings remain /staff/dashboard and /admin/users. My Tickets synchronizes dashboard filters, search, sort and pagination with URL/browser history and supports clearing filters, retry and existing auth redirects. Current Ticket table/mobile-card styling and creation/detail navigation are retained. Obsolete requests must not replace the currently displayed page; forbidden responses clear previously loaded records.
