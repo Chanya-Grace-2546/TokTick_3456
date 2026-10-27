@@ -284,3 +284,80 @@ Mocked Chromium passed Staff and Administrator dashboards at 375/768/1440px, all
 Issue 7 local verification (2026-10-27, feature/lab4-requester-dashboard): 602 server tests in 33 files, 333 client tests in 29 files and 69 mock-only database safety tests passed. Server/client tsc --noEmit and git diff --check passed. Requester dashboard p95 was 2.12 ms and Staff dashboard p95 4.47 ms over 30 measured HTTP requests each after three warm-ups, using 1,000 Tickets split between two Requesters and 3,000 Actions. The 2,000 ms threshold passed; all 99 dashboard recent-list reads were bounded to five. Environment: Node v24.14.0, PostgreSQL 16.15 (Homebrew), macOS arm64, Apple M4, 16 GiB RAM. This is local Supertest/API evidence, not a production-network benchmark.
 
 Mocked Chromium passed requester layouts at 375/768/1440px, keyboard KPI drill-downs, full-summary accessible labels, URL filters, pagination and browser back/forward without horizontal page overflow. Staff/Admin were redirected to their existing landings without fetching requester dashboard data. The browser used a temporary localhost frontend with every API request mocked; screenshots/scripts remain outside the repository. Database suites used only registered disposable non-public schemas in toktickit_e2e_test. No development database connection, schema migration, dependency, seed or environment-file changes were made. These feature-branch results are not final merged-main or full-stack E2E acceptance evidence.
+
+## Issue 8 — final regression and security integration
+
+The Issue 8 branch adds real full-stack Playwright coverage in
+`e2e/lab-04/{actions-taken-flow,ticket-resolution,dashboards,responsive}.spec.ts`.
+Together with the preserved Lab 3 workflows, Playwright discovers 57 tests across
+1440/768/375px projects. Discovery is not execution evidence.
+
+- AC-05/13/18/30/42: `security-regression.api.test.ts` covers cross-Requester reads/writes, identity injection, Origin enforcement, mismatched Action/Ticket IDs, rejected sessions, safe validation and unchanged domain records.
+- AC-19: Action pages retain default 20 and accept at most 50; larger requests return 400 INVALID_QUERY. Unit/API coverage verifies the approved bound.
+- AC-17/18/43: browser tests deliberately lose a committed creation response and retry the identical key/body. A separate owned backend creates an Action, stops, restarts against the same registered schema, and must replay exactly without duplicate Action/history rows.
+- AC-08/10/11/27/34/35/36/38/41/45: existing controlled-lock and rollback tests remain mandatory; browser tests additionally exercise completion, follow-up, resolution, zero-Action legacy resolution, cancellation, reopening and explicit stale-draft review.
+- AC-12/13/22/24/25/40/44: browser tests compare filtered list totals/sets with metrics, verify ownership and role landing/navigation, and cover empty/error/retry states.
+- AC-16/28/29: full-stack responsive tests cover overflow, long content, keyboard focus, expandable details, form focus, screenshots and runtime errors. Stored markup must render as text. These checks do not alone establish complete WCAG 2.1 AA conformance; the manual contrast/accessibility checklist still applies.
+- AC-26: `actions-taken.performance.test.ts` measures list/create/PATCH/follow-up satisfaction on 1,000 Tickets/3,000 initial Actions; both performance suites report p50/p95 and environment details after three warm-ups and 30 measured requests per endpoint. Require p95 <=2 seconds.
+
+Playwright uses its own guarded global setup and available local ports, not existing
+development servers. Before migrations/fixtures, a DisposableDatabase registers
+schema ownership, run ID, marker and OID. Child setup/backend processes verify
+that proof against the explicit test connection and actual PostgreSQL identity.
+Owned processes stop before RESTRICT cleanup; failed safety checks preserve schemas.
+Product seed, development environment files and development data remain untouched.
+
+Local feature-branch verification (2026-10-27, feature/lab4-final-regression-security):
+
+| Check | Actual result |
+|---|---|
+| Full server regression, including migration/recovery | 615 tests / 35 files passed |
+| Dedicated security regression | 11 tests passed |
+| Mock-only safety/logging/process checks | 85 tests passed |
+| Complete client regression | 333 tests / 29 files passed |
+| Lab 4 full-stack Chromium | 36 tests passed at 1440/768/375px |
+| Existing Lab 3 full-stack Chromium | 21 tests passed at 1440/768/375px |
+| Server/client/E2E TypeScript, syntax, diff whitespace | Passed |
+| Dedicated performance suites | Both passed; measurements below |
+
+The explicit URL was loaded in memory from the user-provided private local file,
+without displaying credentials or reading development environment files. A live
+preflight verified toktickit_e2e_test, a registered random non-public schema,
+ownership/marker/run-ID/OID checks, and successful RESTRICT cleanup before the
+regression runs. Test setup and teardown completed without cleanup errors. Owned
+E2E processes stopped before schema cleanup. No development database access,
+product seed changes, new migrations or environment-file changes occurred.
+
+The first Lab 4 E2E run had 15 passes and 21 failures caused by test harness
+assumptions: duplicate Ticket fixture payloads triggered the preserved Lab 2
+five-second deduplication response, an oversized summary violated the existing
+150-character limit, and role-switch navigation raced login completion. Test-only
+corrections make fixture descriptions unique, keep summaries within the existing
+limit and explicitly await login landing. The subsequent complete Lab 4 run passed
+all 36 tests; no application behavior or assertions were weakened to obtain passes.
+
+The focused authentication-log test first failed because a raw exception reached
+console.error. Fixed-context logging passes while retaining the existing 500
+response. The approved Action page-size cap also passes API/unit regression.
+
+Performance fixture: 1,000 Tickets / 3,000 initial Actions, three warm-ups and
+30 measured requests per endpoint; Node v24.14.0, PostgreSQL 16.15 (Homebrew),
+macOS arm64, Apple M4, 16 GiB RAM. Threshold: p95 <=2,000 ms.
+
+| Endpoint | p50 ms | p95 ms |
+|---|---:|---:|
+| Actions GET | 1.90 | 7.65 |
+| Actions POST | 2.43 | 2.74 |
+| Actions PATCH | 2.60 | 3.06 |
+| Follow-up satisfaction POST | 2.05 | 2.32 |
+| Staff dashboard GET | 3.72 | 4.39 |
+| Requester dashboard GET | 1.94 | 2.09 |
+
+These are local Supertest/API measurements, not production-network benchmarks.
+Browser evidence includes a real backend restart with unchanged saved replay and
+history, committed-POST response loss with identical-key/body retry, workflow gates,
+read-only permissions, Requester ownership, responsive layout and keyboard checks.
+Artifacts remain outside the repository under /tmp/toktickit-e2e-results. A later
+Playwright invocation replaces that run directory; capture/copy artifacts separately
+when retaining evidence from multiple invocations. Full manual WCAG 2.1 AA review
+and final merged-main acceptance evidence remain separate from these local results.

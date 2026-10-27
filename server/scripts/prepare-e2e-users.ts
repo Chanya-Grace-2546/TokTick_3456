@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import { Role } from "@prisma/client";
 import { getPrisma } from "../src/prisma";
+import { verifyE2ETarget } from "../tests/helpers/e2eSafety.mjs";
 
 const E2E_PASSWORD = "E2eStrong!456";
 const INITIAL_PASSWORD = "ChangeMe1!";
@@ -47,6 +48,7 @@ async function prepareAccount(
   account: (typeof accounts)[number]
 ) {
   const prisma = getPrisma();
+  await verifyE2ETarget(prisma);
 
   const passwordHash =
     await bcrypt.hash(
@@ -134,7 +136,6 @@ main()
     console.error(
       "Failed to prepare Lab 3 E2E users."
     );
-    console.error(error);
     process.exitCode = 1;
   })
   .finally(async () => {

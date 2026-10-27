@@ -1,6 +1,6 @@
 import { execFileSync } from "child_process";
 import * as path from "path";
-import { test, expect } from "@playwright/test";
+import { test, expect } from "../fixtures";
 import {
   E2E_PASSWORD,
   INITIAL_PASSWORD,
@@ -113,9 +113,8 @@ test.describe.serial("E2E-01/02 authentication", () => {
         })
         .click();
 
-      await expect(page).toHaveURL(
-        /\/staff\/tickets$/
-      );
+      await expect(page).toHaveURL(/\/staff\/dashboard$/);
+      await page.goto("/staff/tickets");
 
       await expect(
         page.getByRole("heading", {
@@ -133,9 +132,8 @@ test.describe.serial("E2E-01/02 authentication", () => {
         USERS.requester.email
       );
 
-      await expect(page).toHaveURL(
-        /\/tickets$/
-      );
+      await expect(page).toHaveURL(/\/dashboard$/);
+      await page.goto("/tickets");
 
       await logout(page);
 
@@ -152,9 +150,8 @@ test.describe.serial("E2E-01/02 authentication", () => {
         USERS.requester.email
       );
 
-      await expect(page).toHaveURL(
-        /\/tickets$/
-      );
+      await expect(page).toHaveURL(/\/dashboard$/);
+      await page.goto("/tickets");
 
       await logout(page);
 

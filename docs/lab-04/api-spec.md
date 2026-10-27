@@ -37,7 +37,7 @@
 ### GET `/api/tickets/:ticketId/actions?page=1&pageSize=20`
 **Roles:** Requester on own Ticket; IT Staff/Admin on accessible Ticket.  
 **Response 200:** `{ "items": [ActionTaken], "page": 1, "pageSize": 20, "total": 3 }`.  
-**Ordering:** `actionAt ASC, id ASC`.  
+**Ordering:** `actionAt ASC, id ASC`. Page size defaults to 20, has a maximum of 50, and values above 50 return 400 `INVALID_QUERY`.
 **Errors:** 401, 404, 400 (pagination), 500.
 
 ### POST `/api/tickets/:ticketId/actions`

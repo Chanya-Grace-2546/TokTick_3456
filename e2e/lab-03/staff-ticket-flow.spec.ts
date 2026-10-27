@@ -1,17 +1,19 @@
-import { test, expect } from "@playwright/test";
+import {apiOrigin,clientOrigin} from "../fixtures";
+import { test, expect } from "../fixtures";
 import { login, logout, USERS, screenshotPath } from "./helpers";
 
 test("E2E-04 IT Staff queue and operational ticket detail", async ({ page }, testInfo) => {
   // Create a fresh, known NEW/unassigned ticket using the existing requester.
   // Global setup already prepares all accounts; do not reset them here.
   await login(page, USERS.requester.email);
-  await expect(page).toHaveURL(/\/tickets$/);
-  const categories = await page.request.get("http://localhost:3000/api/categories");
-  const systems = await page.request.get("http://localhost:3000/api/related-systems");
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await page.goto("/tickets");
+  const categories = await page.request.get(`${apiOrigin()}/api/categories`);
+  const systems = await page.request.get(`${apiOrigin()}/api/related-systems`);
   expect(categories.ok()).toBeTruthy();
   expect(systems.ok()).toBeTruthy();
-  const created = await page.request.post("http://localhost:3000/api/tickets", {
-    headers: { Origin: "http://localhost:5173" },
+  const created = await page.request.post(`${apiOrigin()}/api/tickets`, {
+    headers: { Origin: clientOrigin() },
     data: {
       categoryId: (await categories.json())[0].id,
       relatedSystemId: (await systems.json())[0].id,
@@ -24,7 +26,8 @@ test("E2E-04 IT Staff queue and operational ticket detail", async ({ page }, tes
   const ticket = await created.json();
   await logout(page);
   await login(page, USERS.staff.email);
-  await expect(page).toHaveURL(/\/staff\/tickets$/);
+  await expect(page).toHaveURL(/\/staff\/dashboard$/);
+  await page.goto("/staff/tickets");
   await expect(page.getByRole("heading", { name: "Ticket Queue" })).toBeVisible();
 
   await expect(page.getByRole("button", { name: "Next", exact: true })).toBeEnabled();
@@ -74,7 +77,7 @@ test("E2E-04 IT Staff queue and operational ticket detail", async ({ page }, tes
   await expect(page.getByText("In Progress", { exact: true })).toBeVisible();
   await expect(page.getByText(publicComment, { exact: true })).toBeVisible();
   await expect(page.getByText(internalNote, { exact: true })).toBeVisible();
-  const persisted = await page.request.get(`http://localhost:3000/api/staff/tickets/${ticket.id}`);
+  const persisted = await page.request.get(`${apiOrigin()}/api/staff/tickets/${ticket.id}`);
   expect(persisted.ok()).toBeTruthy();
   expect(await persisted.json()).toMatchObject({
     requestedPriority: "MEDIUM", itPriority: "HIGH", status: "IN_PROGRESS",

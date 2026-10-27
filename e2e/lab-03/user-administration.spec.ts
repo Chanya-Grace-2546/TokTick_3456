@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "../fixtures";
 import {
   E2E_PASSWORD,
   login,
@@ -354,9 +354,8 @@ test(
       })
       .click();
 
-    await expect(page).toHaveURL(
-      /\/tickets$/
-    );
+    await expect(page).toHaveURL(/\/dashboard$/);
+    await page.goto("/tickets");
 
     /*
      * The Requester may reach the route,

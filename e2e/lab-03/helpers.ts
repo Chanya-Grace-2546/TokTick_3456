@@ -137,14 +137,5 @@ export function screenshotPath(
   testInfo: TestInfo,
   screen: string
 ) {
-  return path.join(
-    __dirname,
-    "..",
-    "..",
-    "artifacts",
-    "lab-03",
-    "screenshots",
-    screen,
-    `${testInfo.project.name}.png`
-  );
+  return testInfo.outputPath(`${screen}-${testInfo.project.name}.png`);
 }

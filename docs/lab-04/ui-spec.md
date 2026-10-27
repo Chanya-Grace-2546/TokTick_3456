@@ -40,7 +40,7 @@
 **Location:** existing IT Staff Ticket Detail screen; read-only section on Requester Ticket Detail. Maintain Ticket header, status/priority, attachments, Public Comments and Internal Notes as already implemented.
 
 ### 4.1 Actions list
-Columns or stacked cards: Action Date/Time, Description, Result, Performed By, Assigned To (if approved), State, Follow-Up, Attachment Notes and Edit (staff only). Sort oldest action first, then ID; display timestamps in local time and preserve full datetime via accessible text/title. Use semantic table desktop and labeled cards mobile.
+Columns or stacked cards: Action Date/Time, Description, Result, Performed By, Assigned To (if approved), State, Follow-Up, Attachment Notes and Edit (staff only). Sort oldest action first, then ID; display timestamps in local time and preserve full datetime via accessible text/title. Use semantic labeled cards at every viewport, preserving readable descriptions and line breaks.
 
 ### 4.2 Create mode (Staff/Admin)
 - `Add Action` button opens inline panel or accessible modal consistent with existing UI.
@@ -50,7 +50,7 @@ Columns or stacked cards: Action Date/Time, Description, Result, Performed By, A
 - If follow-up toggles false, warn before clearing entered note or preserve draft until submit; submitted note should follow agreed rule.
 
 ### 4.3 View/edit mode
-- View displays immutable actor, creation time, Ticket association, current version and status.
+- View displays performer, assignment, state, timestamps and follow-up. Keep technical IDs and versions internally for API operations; expanded card details show Created, Last updated and attachment notes.
 - Staff/Admin may edit approved fields; original performer, creation time and Ticket association remain read-only.
 - State controls expose only allowed next states (Planned → In Progress/Completed/Cancelled; In Progress → Completed/Cancelled). Completed/Cancelled are permanently read-only; no edit, reactivation or delete control.
 - Conflict 409: keep draft values, explain record changed, offer Reload; never silently overwrite newer server data.
@@ -87,8 +87,8 @@ Columns or stacked cards: Action Date/Time, Description, Result, Performed By, A
 ## 7. Responsive Design
 | Viewport | Layout |
 |---|---|
-| Desktop ≥1024px | 3–4 metric cards/row; 2-column dashboard sections; Actions table |
-| Tablet 768–1023px | 2 cards/row; stacked dashboard panels; scroll-contained table only if needed |
+| Desktop ≥1024px | 3–4 metric cards/row; 2-column dashboard sections; Action cards |
+| Tablet 768–1023px | 2 cards/row; stacked dashboard panels; responsive Action cards |
 | Mobile <768px | 1 card/row; stacked Action cards; full-width form controls; no page-level horizontal overflow |
 
 Breakpoints are proposed and should be aligned to existing project CSS. No clipped controls, overlapping modals, inaccessible off-screen buttons, or horizontal page scrolling. Test representative widths 1440, 768 and 375 px.
