@@ -139,89 +139,29 @@ npx playwright install chromium
 
 ### Run the E2E Tests
 
-Run each terminal block from the repository root. The backend and E2E blocks
-use subshells with `set -eu`, so a failed check or command stops that block.
+Supply `TOKTICKIT_TEST_DATABASE_URL` securely in the execution environment, explicitly
+pointing to the existing `toktickit_e2e_test` database. Do not put credentials in
+shell history or tracked files. Development `DATABASE_URL` is never a fallback.
+Do not specify `schema=public`.
 
-Before starting the backend, configure `TOKTICKIT_E2E_DATABASE_URL` securely in
-both Terminal 1 and Terminal 3 with the **same connection URL** for
-`toktickit_e2e_test`, including the same dedicated non-`public` schema. Do not use
-the development database `toktickit`, put credentials in shell history, or edit
-the existing `.env` files. Each terminal must explicitly export `DATABASE_URL`;
-exports in one terminal do not propagate to another.
-
-**Terminal 1 — Verify, migrate, seed, then start the backend:**
+From the repository root:
 
 ```bash
-(
-set -eu
-cd server
-export DATABASE_URL="${TOKTICKIT_E2E_DATABASE_URL:?Configure the dedicated E2E database URL first}"
-node --input-type=module <<'JS'
-import { PrismaClient } from '@prisma/client';
-const url = new URL(process.env.DATABASE_URL);
-const schema = url.searchParams.get('schema');
-if (url.pathname !== '/toktickit_e2e_test' || !schema || schema === 'public') {
-  throw new Error('Refusing a database/schema other than the dedicated E2E target.');
-}
-const prisma = new PrismaClient();
-try {
-  const [target] = await prisma.$queryRaw`SELECT current_database() AS name, current_schema() AS schema`;
-  if (target.name !== 'toktickit_e2e_test' || target.schema !== schema) {
-    throw new Error('Unexpected database/schema; provision the dedicated E2E schema first.');
-  }
-  console.log('Verified dedicated E2E database and schema.');
-} finally {
-  await prisma.$disconnect();
-}
-JS
-npx prisma migrate deploy
-npx prisma generate
-npm run prisma:seed
-npm run dev
-)
+cd e2e
+npm test
 ```
 
-**Terminal 2 — Frontend:**
+Playwright creates and registers a random disposable non-public schema, verifies
+the actual database, schema owner, marker, run ID and OID, and applies existing
+migrations before preparing test-only fixtures/accounts. It starts its own backend
+and frontend on available local ports and passes the same verified connection to
+all database-using processes. Do not start development servers for this command;
+unrelated running servers are never reused. Every owned process must stop before
+transactional RESTRICT cleanup; failed identity/cleanup checks preserve the schema.
+No product seed or development environment file is changed.
 
-```bash
-cd client
-npm run dev
-```
-
-**Terminal 3 — E2E Tests:**
-
-```bash
-(
-set -eu
-cd server
-export DATABASE_URL="${TOKTICKIT_E2E_DATABASE_URL:?Use the same E2E database URL as Terminal 1}"
-node --input-type=module <<'JS'
-import { PrismaClient } from '@prisma/client';
-const url = new URL(process.env.DATABASE_URL);
-const schema = url.searchParams.get('schema');
-if (url.pathname !== '/toktickit_e2e_test' || !schema || schema === 'public') {
-  throw new Error('Refusing a database/schema other than the dedicated E2E target.');
-}
-const prisma = new PrismaClient();
-try {
-  const [target] = await prisma.$queryRaw`SELECT current_database() AS name, current_schema() AS schema`;
-  if (target.name !== 'toktickit_e2e_test' || target.schema !== schema) {
-    throw new Error('Unexpected database/schema; migrate and seed the E2E target first.');
-  }
-  console.log('Verified E2E setup database and schema.');
-} finally {
-  await prisma.$disconnect();
-}
-JS
-cd ../e2e
-npx playwright test
-)
-```
-
-Playwright global setup passes its environment to `prepare-e2e-users.ts`, so
-this explicit `DATABASE_URL` makes account preparation use the same database
-and schema as the backend. Start the backend only after verification, migration,
-and seeding succeed; stop any previously running backend on port 3000 first.
+Lab 3 and Lab 4 suites run at 1440px, 768px and 375px. Screenshots, traces and test
+results default to `/tmp/toktickit-e2e-results`; they are local test artifacts.
 
 > **Note:** Do not use `npx vitest run` for E2E testing. E2E tests use Playwright.
 

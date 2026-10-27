@@ -51,3 +51,9 @@ describe("Action lifecycle and validation (UNIT-01, ACTION-STATE-01)", () => {
   });
 
 });
+
+it("bounds Action pages at 50 while retaining default 20", () => {
+  expect(actionPagination({}).pageSize).toBe(20);
+  expect(actionPagination({pageSize:"50"}).pageSize).toBe(50);
+  expect(() => actionPagination({pageSize:"51"})).toThrow("INVALID_QUERY");
+});

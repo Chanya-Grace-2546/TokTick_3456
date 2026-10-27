@@ -259,7 +259,7 @@ Detailed endpoints, request/response shapes, status codes, and conflicts are in 
 | AC-16 | Desktop/tablet/mobile layouts, keyboard focus and safe error/empty/loading states work. |
 | AC-17 | Rapid double click/network retry cannot create unintended duplicate Actions. |
 | AC-18 | Recoverable failures preserve entered form values; no secrets or stack traces leak. |
-| AC-19 | Action list has deterministic `actionAt ASC, id ASC` ordering, stable pagination, and bounded page size. |
+| AC-19 | Action list has deterministic `actionAt ASC, id ASC` ordering, stable pagination, and bounded page size (default 20, maximum 50; larger requests return 400 INVALID_QUERY). |
 | AC-20 | Action detail shows state, performer, assignment, timestamps and follow-up fields; server-controlled fields are not editable. |
 | AC-21 | An inactive user cannot be selected as assignee, and the API rejects assignment even when called directly. |
 | AC-22 | Successful Action or Ticket updates refresh the visible list, status badge and affected dashboard data. |

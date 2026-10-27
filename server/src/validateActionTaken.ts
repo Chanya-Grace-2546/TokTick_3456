@@ -46,6 +46,7 @@ export function actionPagination(query: Record<string, unknown>) {
   }
   const page = read("page", 1);
   const pageSize = read("pageSize", 20);
+  if (pageSize > 50) fields.pageSize = "Page size must not exceed 50.";
   if ((page - 1) * pageSize > maxInt) fields.page = "Page exceeds the supported range.";
   if (Object.keys(fields).length) throw new ActionError(400, "INVALID_QUERY", fields);
   return { page, pageSize, skip: (page - 1) * pageSize };

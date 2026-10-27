@@ -6,7 +6,7 @@ export default defineConfig({
   root: fileURLToPath(new URL(".", import.meta.url)),
   test: {
     environment: "node", setupFiles: [], pool: "forks",
-    include: ["tests/helpers/databaseSafety.unit.test.mts", "tests/helpers/migrationRecovery.unit.test.mts"],
+    include: ["tests/helpers/databaseSafety.unit.test.mts", "tests/helpers/migrationRecovery.unit.test.mts", "tests/helpers/e2eSafety.unit.test.mts", "tests/helpers/authLogging.unit.test.mts", "tests/helpers/e2eProcesses.unit.test.mts"],
     restoreMocks: true, unstubEnvs: true,
   },
 });

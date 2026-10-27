@@ -25,7 +25,7 @@ it("PERF-01/02: staff/requester dashboards p95 <=2s on 1000 Tickets / 3000 Actio
       else {expect(res.body.metrics).toEqual({openTickets:375,waitingForRequester:0});expect(res.body.recentlyUpdated.length).toBeLessThanOrEqual(5);expect(res.body.recentlyResolved.length).toBeLessThanOrEqual(5);}
     }
     const p95=times.sort((a,b)=>a-b)[Math.ceil(times.length*.95)-1];
-    process.stdout.write(JSON.stringify({test:`${endpoint}-dashboard-performance`,tickets:1000,actions:3000,warmedRequests:30,p95Milliseconds:Math.round(p95*100)/100,node:process.version,postgres:postgres.version,platform:os.platform(),arch:os.arch(),cpu:os.cpus()[0]?.model,memoryGiB:Math.round(os.totalmem()/1024**3)})+"\n");
+    process.stdout.write(JSON.stringify({test:`${endpoint}-dashboard-performance`,tickets:1000,actions:3000,warmedRequests:30,p50Milliseconds:Math.round(times[Math.ceil(times.length*.5)-1]*100)/100,p95Milliseconds:Math.round(p95*100)/100,node:process.version,postgres:postgres.version,platform:os.platform(),arch:os.arch(),cpu:os.cpus()[0]?.model,memoryGiB:Math.round(os.totalmem()/1024**3)})+"\n");
     expect(p95).toBeLessThanOrEqual(2000);
   }
   expect(reads).toHaveLength(99);expect(reads.every(query=>query.take===5)).toBe(true);

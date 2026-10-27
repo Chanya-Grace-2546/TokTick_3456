@@ -1,7 +1,7 @@
 import {
   test,
   expect,
-} from "@playwright/test";
+} from "../fixtures";
 import {
   login,
   logout,
@@ -43,9 +43,8 @@ test(
       USERS.requester.email
     );
 
-    await expect(page).toHaveURL(
-      /\/tickets$/
-    );
+    await expect(page).toHaveURL(/\/dashboard$/);
+    await page.goto("/tickets");
 
     await page
       .locator(
@@ -330,9 +329,8 @@ test(
       USERS.otherRequester.email
     );
 
-    await expect(page).toHaveURL(
-      /\/tickets$/
-    );
+    await expect(page).toHaveURL(/\/dashboard$/);
+    await page.goto("/tickets");
 
     await page.goto(ownedTicketUrl);
 

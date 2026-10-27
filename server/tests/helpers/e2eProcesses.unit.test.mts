@@ -1,0 +1,11 @@
+import {EventEmitter} from 'node:events';
+import {afterEach,expect,it,vi} from 'vitest';
+const fork=vi.hoisted(()=>vi.fn());
+vi.mock('node:child_process',()=>({fork}));
+import {startProcess,stopProcess,stopOwnedProcesses} from '../../../e2e/processes.js';
+function child(){const c:any=new EventEmitter();c.exitCode=null;c.signalCode=null;c.kill=vi.fn((signal:string)=>{c.signalCode=signal;queueMicrotask(()=>c.emit('exit'));return true;});return c;}
+afterEach(async()=>{await stopOwnedProcesses();vi.useRealTimers();vi.clearAllMocks();});
+it('launches only an owned child with explicit inherited settings and IPC readiness',async()=>{const c=child();fork.mockReturnValue(c);const running=startProcess('backend',{TOKTICKIT_E2E_WORKDIR:'/tmp/owned',DATABASE_URL:'explicit-sentinel'});c.emit('message',{ready:true,port:12345});const ready=await running;expect(ready.origin).toBe('http://localhost:12345');expect(fork.mock.calls[0][2].env.DATABASE_URL).toBe('explicit-sentinel');expect(fork.mock.calls[0][2].stdio).toEqual(['ignore','ignore','ignore','ipc']);await stopProcess(c);expect(c.kill).toHaveBeenCalledWith('SIGTERM');});
+it('refuses an invalid child readiness response and stops the child',async()=>{const c=child();fork.mockReturnValue(c);const running=startProcess('frontend',{});c.emit('message',{ready:true,port:70000});await expect(running).rejects.toThrow('failed safe startup');expect(c.kill).toHaveBeenCalled();});
+it('times out startup without exposing child output',async()=>{vi.useFakeTimers();const c=child();fork.mockReturnValue(c);const running=startProcess('backend',{});const assertion=expect(running).rejects.toThrow('diagnostics withheld');await vi.advanceTimersByTimeAsync(30000);await assertion;expect(c.kill).toHaveBeenCalledWith('SIGTERM');});
+it('refuses cleanup when an owned process does not stop, until its exit is observed',async()=>{vi.useFakeTimers();const c=child();c.kill.mockImplementation(()=>true);fork.mockReturnValue(c);const running=startProcess('backend',{});c.emit('message',{ready:true,port:12345});await running;const stopping=stopOwnedProcesses();const assertion=expect(stopping).rejects.toThrow('schema preserved');await vi.advanceTimersByTimeAsync(10000);await assertion;c.signalCode='SIGKILL';c.emit('exit');});
