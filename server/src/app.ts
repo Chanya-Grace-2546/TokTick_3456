@@ -1,3 +1,4 @@
+import { ticketStatusHistory } from "./ticketStatusHistory.js";
 import { requesterDashboard } from "./requesterDashboard.js";
 import { validateRequesterTicketQuery } from "./validateRequesterTicketQuery.js";
 import { staffDashboard } from "./staffDashboard.js";
@@ -63,6 +64,7 @@ app.use(express.json());
 app.use(cookieParser());
 app.use("/api/admin/users", adminUsers);
 app.use("/api/tickets/:ticketId/actions", actionsTaken);
+app.use("/api/tickets/:ticketId/status-history", ticketStatusHistory);
 app.use("/api/tickets/:ticketId/actions", actionBodyError);
 
 // ---------------------------------------------------------------------------
@@ -434,6 +436,18 @@ app.get(
     }
   }
 );
+
+// Action assignment has narrower eligibility than legacy Ticket ownership.
+app.get("/api/staff/action-assignees", requireAuth, requirePasswordChanged, requireRole("IT_STAFF", "ADMINISTRATOR"), async (_req, res) => {
+  try {
+    const assignees = await getPrisma().user.findMany({
+      where: { isActive: true, role: "IT_STAFF" },
+      select: { id: true, name: true, email: true, role: true },
+      orderBy: [{ name: "asc" }, { id: "asc" }],
+    });
+    res.json(assignees);
+  } catch { res.status(500).json({ error: "UNEXPECTED_ERROR" }); }
+});
 
 app.use("/api/dashboard/staff", staffDashboard);
 app.use("/api/dashboard/requester", requesterDashboard);

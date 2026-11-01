@@ -1,5 +1,5 @@
 import { beforeEach, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import StaffDashboard from "../../src/pages/StaffDashboard.js";
 import * as api from "../../src/api.js";
@@ -45,3 +45,5 @@ it("keeps complete recent Ticket labels and summaries available despite visual t
   expect(link.querySelector("time")).toHaveAttribute("dateTime",data.recentTickets[0].updatedAt);
   expect(link).toHaveTextContent("In Progress");expect(link).toHaveTextContent("Asia/Bangkok");
 });
+
+it("shows only approved quick actions",()=>{show();const nav=within(screen.getByRole("navigation",{name:"Dashboard quick actions"}));expect(nav.getAllByRole("link")).toHaveLength(2);expect(nav.getByRole("link",{name:"Search Tickets"})).toHaveAttribute("href","/staff/tickets#queue-search");expect(nav.getByRole("link",{name:"My Queue"})).toHaveAttribute("href","/staff/tickets?owner=me");});

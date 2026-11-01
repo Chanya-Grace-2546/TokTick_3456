@@ -1,5 +1,5 @@
 import { beforeEach,expect,it,vi } from "vitest";
-import { act,fireEvent,render,screen } from "@testing-library/react";
+import { act,fireEvent,render,screen,within } from "@testing-library/react";
 import { MemoryRouter,Routes,Route } from "react-router-dom";
 import RequesterDashboard from "../../src/pages/RequesterDashboard.js";
 import * as api from "../../src/api.js";
@@ -22,3 +22,5 @@ it("retries without leaking server details",async()=>{vi.mocked(api.fetchRequest
 it.each([[401,"UNAUTHENTICATED","Login destination"],[403,"PASSWORD_CHANGE_REQUIRED","Password destination"]] as const)("handles auth %s safely",async(status,code,destination)=>{vi.mocked(api.fetchRequesterDashboard).mockRejectedValue(new api.RequesterApiError(status,code));show();await screen.findByText(destination);expect(refresh).toHaveBeenCalledOnce();});
 it("clears previous data on a forbidden refresh",async()=>{show();await screen.findByRole("link",{name:/Open Tickets:/});vi.mocked(api.fetchRequesterDashboard).mockRejectedValue(new api.RequesterApiError(403,"FORBIDDEN"));fireEvent.click(screen.getByRole("button",{name:"Refresh Dashboard"}));await screen.findByRole("alert");expect(screen.queryByRole("link",{name:/Open Tickets:/})).not.toBeInTheDocument();});
 it("ignores late responses after navigation/unmount",async()=>{let release!:(value:api.RequesterDashboardData)=>void;vi.mocked(api.fetchRequesterDashboard).mockReturnValue(new Promise(resolve=>{release=resolve;}));const view=show();view.unmount();await act(async()=>release(data));expect(screen.queryByText(/Last updated/)).not.toBeInTheDocument();});
+
+it("shows only approved quick actions",()=>{show();const nav=within(screen.getByRole("navigation",{name:"Dashboard quick actions"}));expect(nav.getAllByRole("link")).toHaveLength(3);expect(nav.getByRole("link",{name:"Create Ticket"})).toHaveAttribute("href","/tickets/new");expect(nav.getByRole("link",{name:"Search Tickets"})).toHaveAttribute("href","/tickets#ticket-search");expect(nav.getByRole("link",{name:"My Tickets"})).toHaveAttribute("href","/tickets");});

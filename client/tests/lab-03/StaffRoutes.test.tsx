@@ -17,6 +17,7 @@ describe("Staff Queue routes", () => {
     vi.spyOn(api, "getMe").mockResolvedValue(staff);
     vi.spyOn(api, "fetchStaffTickets").mockResolvedValue({ items: [], page: 1, pageSize: 10, totalItems: 0, totalPages: 1 });
     vi.spyOn(api, "fetchStaffOwners").mockResolvedValue([]);
+    vi.spyOn(api, "fetchActionAssignees").mockResolvedValue([]);
     vi.spyOn(api, "fetchCategories").mockResolvedValue([]);
     vi.spyOn(api, "fetchTickets").mockResolvedValue({ items: [], page: 1, pageSize: 10, totalItems: 0, totalPages: 1, noResults: false });
   });

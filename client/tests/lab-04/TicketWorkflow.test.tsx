@@ -17,14 +17,14 @@ it.each(["RESOLVED", "CLOSED", "CANCELLED"])("shows %s Ticket Actions read-only"
 it("offers an append-only outcome form without allowing completed Action edits", async () => {
   render(<MemoryRouter><ActionsTaken ticketId={42} canWrite owners={owners} ticketStatus="OPEN" /></MemoryRouter>);
   fireEvent.click(await screen.findByRole("button", { name: "Record Follow-Up Outcome" }));
-  expect(screen.getByRole("heading", { name: "Record Follow-Up Outcome for Action #31" })).toHaveFocus();
-  expect(screen.queryByRole("button", { name: "Edit Action 31" })).not.toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Record Follow-Up Outcome for Action 1" })).toHaveFocus();
+  expect(screen.queryByRole("button", { name: "Edit Action 1" })).not.toBeInTheDocument();
 });
 it("renders recorded outcomes read-only to Requesters without fetching staff", async () => {
   auth.role = "REQUESTER";
   vi.mocked(api.fetchActions).mockResolvedValue({ ...page, items: [{ ...completed, followUpResolution: { outcome: "Service confirmed", actor: { id: 2, name: "Staff" }, occurredAt: action.updatedAt } }] });
   render(<MemoryRouter><ActionsTaken ticketId={42} ticketStatus="RESOLVED" /></MemoryRouter>);
-  await screen.findByText("Service confirmed"); expect(screen.getByText("Satisfied")).toBeInTheDocument(); expect(api.fetchStaffOwners).not.toHaveBeenCalled();
+  await screen.findByText("Service confirmed"); expect(screen.getByText(/Recorded by Staff/)).toBeInTheDocument(); expect(screen.getByText(/Recorded by Staff/).querySelector("time")).toHaveAttribute("datetime", action.updatedAt); expect(screen.getByText("Satisfied")).toBeInTheDocument(); expect(api.fetchStaffOwners).not.toHaveBeenCalled();
 });
 it("retains the original outcome and version for an ambiguous retry", async () => {
   vi.mocked(api.recordFollowUpResolution).mockRejectedValueOnce(new TypeError("network")).mockResolvedValueOnce({ followUpResolution: { outcome: "Verified", actor: { id: 2, name: "Staff" }, occurredAt: action.updatedAt } });
@@ -37,7 +37,7 @@ it("retains the original outcome and version for an ambiguous retry", async () =
 it("retains an edit draft when a status refresh makes the Ticket read-only", async () => {
   vi.mocked(api.fetchActions).mockResolvedValue(page);
   const tree = (ticketStatus: string, refreshKey = 0) => <MemoryRouter><ActionsTaken ticketId={42} canWrite owners={owners} ticketStatus={ticketStatus} refreshKey={refreshKey} /></MemoryRouter>;
-  const view = render(tree("OPEN")); fireEvent.click(await screen.findByRole("button", { name: "Edit Action 31" }));
+  const view = render(tree("OPEN")); fireEvent.click(await screen.findByRole("button", { name: "Edit Action 1" }));
   const description = screen.getByLabelText(/Description/); fireEvent.change(description, { target: { value: "Preserved draft" } });
   view.rerender(tree("CANCELLED", 1)); await waitFor(() => expect(api.fetchActions).toHaveBeenCalledTimes(2));
   expect(description).toHaveValue("Preserved draft"); expect(description).toBeDisabled();

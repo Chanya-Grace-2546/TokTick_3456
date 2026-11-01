@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   Category, Priority, StaffOwner, StaffQueueError, StaffQueueItem,
   StaffQueueParams, StaffQueueResponse, StaffQueueSort, StaffTicketStatus,
@@ -45,6 +45,10 @@ function Updated({ date }: { date: string }) {
 export default function StaffTicketQueue() {
   const { refreshUser } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  useEffect(() => {
+    if (location.hash === "#queue-search") document.getElementById("queue-search")?.focus();
+  }, [location.hash]);
   const [searchParams, setSearchParams] = useSearchParams();
   const query = useMemo(() => {
     const values: Record<string, unknown> = Object.assign(Object.create(null), DEFAULT_QUERY);
@@ -257,7 +261,7 @@ export default function StaffTicketQueue() {
                 <td><PriorityBadge priority={ticket.requestedPriority} /></td>
                 <td><PriorityBadge priority={ticket.itPriority} /></td>
                 <td><Status status={ticket.status} /></td>
-<td style={{ overflowWrap: "normal", wordBreak: "normal" }}>
+<td style={{ overflowWrap: "anywhere", wordBreak: "normal" }}>
   {ticket.owner?.name ?? "Unassigned"}
 </td>
               </tr>)}</tbody>
@@ -297,7 +301,7 @@ export default function StaffTicketQueue() {
             >
               Ticket Number
             </div>
-            <div style={{ fontWeight: 600 }}>
+            <div className="ticket-link-label" style={{ fontWeight: 600 }}>
               {ticket.ticketNumber}
             </div>
           </div>

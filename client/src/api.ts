@@ -304,6 +304,10 @@ export async function fetchStaffTickets(params: StaffQueueParams): Promise<Staff
   return readStaffResponse(await fetch(`${API_URL}/api/staff/tickets${suffix}`, { credentials: "include" }));
 }
 
+export async function fetchActionAssignees(): Promise<StaffOwner[]> {
+  return readStaffResponse(await fetch(`${API_URL}/api/staff/action-assignees`, { credentials: "include" }));
+}
+
 export async function fetchStaffOwners(): Promise<StaffOwner[]> {
   return readStaffResponse(await fetch(`${API_URL}/api/staff/owners`, { credentials: "include" }));
 }
@@ -1053,4 +1057,9 @@ export async function fetchRequesterDashboard():Promise<RequesterDashboardData> 
   const res=await fetch(`${API_URL}/api/dashboard/requester`,{credentials:"include"});
   if(!res.ok){const body=await res.json().catch(()=>({}));throw new RequesterApiError(res.status,body.error??"LOAD_DASHBOARD_FAILED",body.fields??{});}
   return res.json();
+}
+
+export interface TicketStatusEvent { id: number; oldStatus: string; newStatus: string; actor: { name: string; role: string }; occurredAt: string }
+export function fetchTicketStatusHistory(ticketId: number): Promise<{ items: TicketStatusEvent[] }> {
+  return actionRequest(`${ticketId}/status-history`);
 }

@@ -1,8 +1,8 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { ActionRequestError, ActionTaken, recordFollowUpResolution } from "../api.js";
-export default function FollowUpResolutionForm({ action, readOnly, onSuccess, onFailure, onCancel, onReload }: {
+export default function FollowUpResolutionForm({ action, actionNumber, readOnly, onSuccess, onFailure, onCancel, onReload }: {
   onReload?: () => Promise<ActionTaken | undefined>;
-  action: ActionTaken; readOnly: boolean; onSuccess: () => void; onFailure: (error: unknown) => void; onCancel: () => void;
+  actionNumber?: number; action: ActionTaken; readOnly: boolean; onSuccess: () => void; onFailure: (error: unknown) => void; onCancel: () => void;
 }) {
   const [outcome, setOutcome] = useState("");
   const [pending, setPending] = useState(false), [message, setMessage] = useState("");
@@ -29,7 +29,7 @@ export default function FollowUpResolutionForm({ action, readOnly, onSuccess, on
         : "Could not record the outcome. Your values are retained; retry or reload and review the Action.");
     } finally { busy.current = false; setPending(false); }
   }}>
-    <h3 ref={heading} tabIndex={-1} id={`${id}-title`}>Record Follow-Up Outcome for Action #{action.id}</h3>
+    <h3 ref={heading} tabIndex={-1} id={`${id}-title`}>Record Follow-Up Outcome{actionNumber ? ` for Action ${actionNumber}` : ""}</h3>
     <p>The completed Action stays unchanged. This adds an audited follow-up satisfaction event.</p>
     {message && <p role="alert">{message}</p>}
     {onReload && <button type="button" className="btn btn-outline-success btn-sm mb-2" disabled={pending} onClick={async () => {

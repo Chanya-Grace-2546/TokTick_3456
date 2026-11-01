@@ -1,7 +1,7 @@
-import {Page,expect} from '@playwright/test';
+import {Page,TestInfo,expect} from '@playwright/test';
 import {randomUUID} from 'node:crypto';
 import {apiOrigin,clientOrigin} from '../fixtures';
-import {login,logout,USERS} from '../lab-03/helpers';
+import {login,logout,USERS,screenshotPath} from '../lab-03/helpers';
 export {login,logout,USERS,apiOrigin,clientOrigin};
 export async function createTicket(page:Page,summary='Issue 8 isolated Ticket') {
  await login(page,USERS.requester.email);await expect(page).toHaveURL(/\/dashboard$/);
@@ -14,3 +14,11 @@ export async function asStaff(page:Page,ticketId:number) {await logout(page);awa
 export async function actions(page:Page,ticketId:number){const response=await page.request.get(`${apiOrigin()}/api/tickets/${ticketId}/actions`);expect(response.status()).toBe(200);return response.json();}
 export async function status(page:Page,ticketId:number,value:string,expectedStatus?:string){return page.request.patch(`${apiOrigin()}/api/staff/tickets/${ticketId}/status`,{headers:{Origin:clientOrigin()},data:{status:value,...(expectedStatus?{expectedStatus}:{})}});}
 export async function postAction(page:Page,ticketId:number,data:object,key?:string){return page.request.post(`${apiOrigin()}/api/tickets/${ticketId}/actions`,{headers:{Origin:clientOrigin(),...(key?{'Idempotency-Key':key}:{})},data});}
+
+// Use the existing screenshot path helper; retain Lab 4 evidence outside test output.
+// Call only after checkpoint assertions pass. Stable names are replaced on reruns.
+export async function captureScreen(page: Page, info: TestInfo,
+  screen: "actions-taken" | "staff-dashboard" | "requester-dashboard", checkpoint?: string) {
+  await page.evaluate(() => document.fonts.ready.then(() => undefined));
+  await page.screenshot({ path: screenshotPath(info, screen, { lab: "lab-04", checkpoint }), fullPage: true, animations: "disabled" });
+}

@@ -135,7 +135,12 @@ export async function logout(
 
 export function screenshotPath(
   testInfo: TestInfo,
-  screen: string
+  screen: string,
+  persistent?: { lab: "lab-04"; checkpoint?: string }
 ) {
+  if (persistent) {
+    return path.resolve(__dirname, "../../artifacts", persistent.lab, "screenshots", screen,
+      `${persistent.checkpoint ? `${persistent.checkpoint}-` : ""}${testInfo.project.name}.png`);
+  }
   return testInfo.outputPath(`${screen}-${testInfo.project.name}.png`);
 }

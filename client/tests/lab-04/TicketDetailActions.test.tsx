@@ -23,7 +23,8 @@ beforeEach(() => {
   fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = new URL(String(input)).pathname;
     let body: unknown;
-    if (path === "/api/staff/owners") body = inactive ? [] : owners;
+    if (path.endsWith("/status-history")) body = { items: [] };
+    else if ((path === "/api/staff/owners" || path === "/api/staff/action-assignees")) body = inactive ? [] : owners;
     else if (path === "/api/staff/tickets/42") {
       if (posted && summaryStatus) return new Response(JSON.stringify({ error: "UNEXPECTED_ERROR" }), { status: summaryStatus });
       body = detail;
@@ -110,7 +111,7 @@ describe("Ticket Detail Actions integration (AC-15/22/33/42)", () => {
     expect(screen.getByLabelText("Attachment Notes")).toHaveValue("Unsaved attachment note");
   });
   it.each([false,true])("retains edit drafts and stale recovery through a Ticket comment (stale=%s)", async stale => {
-    renderDetail(); fireEvent.click(await screen.findByRole("button", { name: "Edit Action 31" }));
+    renderDetail(); fireEvent.click(await screen.findByRole("button", { name: "Edit Action 1" }));
     fireEvent.change(screen.getByLabelText("Description (required)"), { target: { value: "My edit" } });
     if (stale) { patchStatus = 409; fireEvent.click(screen.getByRole("button", { name: "Save Action" })); await screen.findByRole("button", { name: "Reload latest Action" }); }
     await ticketOperation("comment");
@@ -146,7 +147,7 @@ describe("Ticket Detail Actions integration (AC-15/22/33/42)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save Action" })); await screen.findByText("Action saved.");
   });
   it.each(["write","conflict reload"])("clears protected Action data after authorization fails during %s", async stage => {
-    renderDetail(); fireEvent.click(await screen.findByRole("button", { name: "Edit Action 31" }));
+    renderDetail(); fireEvent.click(await screen.findByRole("button", { name: "Edit Action 1" }));
     patchStatus = stage === "write" ? 403 : 409;
     fireEvent.click(screen.getByRole("button", { name: "Save Action" }));
     if (stage === "conflict reload") {
@@ -177,7 +178,7 @@ describe("Issue 5 status recovery integration", () => {
   });
   it("shows actionable resolution gate feedback without losing Action drafts", async () => {
     vi.spyOn(window, "confirm").mockReturnValueOnce(true);
-    renderDetail(); fireEvent.click(await screen.findByRole("button", { name: "Edit Action 31" }));
+    renderDetail(); fireEvent.click(await screen.findByRole("button", { name: "Edit Action 1" }));
     fireEvent.change(screen.getByLabelText("Description (required)"), { target: { value: "Still working" } });
     ticketStatusError = "RESOLUTION_BLOCKED";
     fireEvent.change(document.getElementById("staff-status")!, { target: { value: "RESOLVED" } });

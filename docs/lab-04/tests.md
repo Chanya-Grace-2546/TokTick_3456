@@ -8,12 +8,12 @@ Spec DD → Test DD → TDD. Test unit, API/integration, authorization, UI compo
 ## 2. Master test matrix
 | Test ID | Type | AC | Scenario | Expected result | Target automated file | Final status |
 |---|---|---|---|---|---|---|
-| ACTION-ASSIGN-01 | API | AC-21, AC-33 | Active/inactive assignee, independent owner and performer | Active allowed, inactive 422, performer session actor | `server/tests/lab-04/actions-taken.api.test.ts` | Not run |
+| ACTION-ASSIGN-01 | API | AC-21, AC-33 | Active/inactive IT Staff, Administrator/Requester assignees, unassigned, independent owner and performer | Active IT Staff or unassigned allowed; inactive/non-IT-Staff 422; performer session actor | `server/tests/lab-04/actions-taken.api.test.ts` | Not run |
 | ACTION-AUDIT-01 | API | AC-27, AC-34, AC-43 | Durable append-only audit after restart | Immutable audit preserved | `server/tests/lab-04/actions-taken.api.test.ts` | Not run |
 | ACTION-STATE-01 | API | AC-07, AC-34 | State transitions, terminal lock | Only permitted transitions; immutable terminal states | `server/tests/lab-04/actions-taken.api.test.ts` | Not run |
 | API-01 | API | AC-01, AC-02 | Staff creates Action on another staff-owned Ticket | 201, correct Ticket/performer, owner unchanged | `server/tests/lab-04/actions-taken.api.test.ts` | Not run |
 | API-02 | API | AC-05 | List Actions on owned vs unowned Ticket | Own 200; other 404/deny | `server/tests/lab-04/actions-taken.api.test.ts` | Not run |
-| API-03 | API | AC-03, AC-04 | Invalid follow-up, inactive assignee, bad date/state | 422 safe field errors | `server/tests/lab-04/actions-taken.api.test.ts` | Not run |
+| API-03 | API | AC-03, AC-04 | Invalid follow-up, inactive/non-IT-Staff assignee, bad date/state | 422 safe field errors | `server/tests/lab-04/actions-taken.api.test.ts` | Not run |
 | API-04 | API | AC-06 | Edit Action, attempt protected field changes | Allowed fields saved; performer immutable | `server/tests/lab-04/actions-taken.api.test.ts` | Not run |
 | API-05 | API | AC-07 | Assign, complete, cancel; terminal edit attempts | Approved transitions only; audit appended | `server/tests/lab-04/actions-taken.api.test.ts` | Not run |
 | API-06 | API | AC-08, AC-09 | Requester advisory and allowed/forbidden Ticket changes | Advisory unchanged; invalid transition denied | `server/tests/lab-04/ticket-workflow.api.test.ts` | Not run |
@@ -23,7 +23,7 @@ Spec DD → Test DD → TDD. Test unit, API/integration, authorization, UI compo
 | API-10 | API | AC-17, AC-18 | Repeat same create request/idempotency key; simulated server error | No duplicate; safe error | `server/tests/lab-04/actions-taken.api.test.ts` | Not run |
 | API-11 | API | AC-01, AC-12 | Multiple Actions/Tickets share timestamps; paginate and sort | Stable order and bounded results | `server/tests/lab-04/actions-taken.api.test.ts` | Not run |
 | API-12 | API | AC-19, AC-20 | Action detail, pagination, equal-time ties | Immutable fields protected, stable ordered pages | `server/tests/lab-04/actions-taken.api.test.ts` | Not run |
-| API-13 | API | AC-21, AC-27 | Inactive assignment and audit mutation attempt | 422; audit entries append and remain immutable | `server/tests/lab-04/actions-taken.api.test.ts` | Not run |
+| API-13 | API | AC-21, AC-27 | Inactive/Administrator/Requester assignment and audit mutation attempt | 422; audit entries append and remain immutable | `server/tests/lab-04/actions-taken.api.test.ts` | Not run |
 | API-14 | API | AC-30 | Health and safe server failure | No secret/SQL/stack in response | `server/tests/lab-04/ticket-workflow.api.test.ts` | Not run |
 | API-15 | API | AC-39 | PLANNED without result and COMPLETED without result | 201 planned, 422 completed missing result | `server/tests/lab-04/actions-taken.api.test.ts` | Not run |
 | API-16 | API | AC-40, AC-12, AC-13 | Dashboard wire values and count/list parity | Enums, summary, ticketNumber, matching filtered lists | `server/tests/lab-04/staff-dashboard.api.test.ts` | Not run |

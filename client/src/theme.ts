@@ -12,6 +12,7 @@ export const zenGreen = {
   readOnlyBg: "#F0F3F1", // gray-green shading for read-only fields
   error: "#B3261E",
   warning: "#B8860B",
+  warningBackground: "#FFF4D6",
   success: "#0B7A46",
 };
 

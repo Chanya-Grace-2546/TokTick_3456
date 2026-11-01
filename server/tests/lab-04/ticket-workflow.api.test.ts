@@ -1,6 +1,7 @@
 import { beforeAll, beforeEach, expect, it, vi } from "vitest";
 import request from "supertest";
-import { verifiedSqlObject } from "../helpers/databaseSafety.mjs";
+import type { TicketStatusHistory } from "@prisma/client";
+import { verifyCurrentTestDatabase, verifiedSqlObject } from "../helpers/databaseSafety.mjs";
 import { app } from "../../src/app.js";
 import { actionTicket, actionUser, origin, prisma } from "./helpers/actionsTestDatabase.js";
 let staff: Awaited<ReturnType<typeof actionUser>>, requester: typeof staff;
@@ -14,6 +15,56 @@ const satisfy = (id: number, outcome = "Verified service restored", actor = staf
 it("preserves the flat legacy response and records Ticket history", async () => {
   const res = await status("RESOLVED"); expect(res.status).toBe(200); expect(res.body).toEqual({ id: ticket.id, status: "RESOLVED", ownerId: null });
   expect(await prisma.ticketStatusHistory.findMany({ where: { ticketId: ticket.id } })).toMatchObject([{ oldStatus: "OPEN", newStatus: "RESOLVED", actorUserId: staff.user.id }]);
+});
+it("appends exactly one complete immutable status event per transition and persists the chain across reconnect", async () => {
+  // Start at NEW through the normal isolated fixture, rather than changing status directly.
+  ticket = await actionTicket(requester.user.id);
+  const administrator = await actionUser("ADMINISTRATOR");
+  const history = () => prisma.ticketStatusHistory.findMany({ where: { ticketId: ticket.id }, orderBy: { id: "asc" } });
+  // Use PostgreSQL's millisecond clock to avoid client/server clock skew and timestamp rounding races.
+  const databaseTime = async () => (await prisma.$queryRaw<{ now: Date }[]>`SELECT CURRENT_TIMESTAMP(3) AS now`)[0].now;
+  const transitions = [
+    ["NEW", "OPEN"], ["OPEN", "IN_PROGRESS"], ["IN_PROGRESS", "WAITING_FOR_REQUESTER"],
+    ["WAITING_FOR_REQUESTER", "IN_PROGRESS"], ["IN_PROGRESS", "RESOLVED"],
+    ["RESOLVED", "CLOSED"], ["CLOSED", "REOPENED"], ["REOPENED", "CANCELLED"],
+  ] as const;
+  let earlier: TicketStatusHistory[] = [];
+  expect(await history()).toEqual(earlier);
+  for (const [index, [oldStatus, newStatus]] of transitions.entries()) {
+    const actor = index % 2 ? administrator : staff;
+    const startedAt = await databaseTime();
+    const response = await status(newStatus, oldStatus, actor);
+    const finishedAt = await databaseTime();
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ id: ticket.id, status: newStatus, ownerId: null });
+    const rows = await history();
+    expect(rows).toHaveLength(earlier.length + 1);
+    expect(rows.slice(0, earlier.length)).toEqual(earlier);
+    const event = rows[rows.length - 1];
+    expect(event).toEqual({ id: expect.any(Number), ticketId: ticket.id, actorUserId: actor.user.id,
+      oldStatus, newStatus, occurredAt: expect.any(Date) });
+    expect(event.occurredAt.getTime()).toBeGreaterThanOrEqual(startedAt.getTime());
+    expect(event.occurredAt.getTime()).toBeLessThanOrEqual(finishedAt.getTime());
+    expect(new Set(rows.map(row => row.id)).size).toBe(rows.length);
+    expect((await prisma.ticket.findUniqueOrThrow({ where: { id: ticket.id } })).status).toBe(newStatus);
+    earlier = structuredClone(rows);
+  }
+  // Rejected requests must preserve the entire accumulated history, not merely its count.
+  const rejected = [
+    { value: "OPEN", expected: "CANCELLED", actor: staff, http: 409, code: "INVALID_STATUS_TRANSITION" },
+    { value: "OPEN", expected: "OPEN", actor: staff, http: 409, code: "STALE_UPDATE" },
+    { value: "INVALID", expected: "CANCELLED", actor: staff, http: 400, code: "VALIDATION_FAILED" },
+    { value: "OPEN", expected: "CANCELLED", actor: requester, http: 403, code: "FORBIDDEN" },
+  ];
+  for (const attempt of rejected) {
+    const response = await status(attempt.value, attempt.expected, attempt.actor);
+    expect(response.status).toBe(attempt.http); expect(response.body.error).toBe(attempt.code);
+    expect(await history()).toEqual(earlier);
+    expect((await prisma.ticket.findUniqueOrThrow({ where: { id: ticket.id } })).status).toBe("CANCELLED");
+  }
+  await prisma.$disconnect();
+  await verifyCurrentTestDatabase(prisma); // Reconnect only to the same registered disposable schema.
+  expect(await history()).toEqual(earlier);
 });
 it("rejects stale status requests without writes and serializes competing transitions", async () => {
   const results = await Promise.all([status("IN_PROGRESS", "OPEN"), status("WAITING_FOR_REQUESTER", "OPEN")]);

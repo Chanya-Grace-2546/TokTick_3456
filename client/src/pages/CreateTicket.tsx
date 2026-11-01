@@ -47,6 +47,7 @@ export default function CreateTicket() {
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [relatedSystems, setRelatedSystems] = useState<RelatedSystem[]>([]);
+  const [referenceRevision, setReferenceRevision] = useState(0);
   const [refState, setRefState] = useState<ReferenceDataState>("loading");
 
   const [categoryId, setCategoryId] = useState("");
@@ -65,6 +66,7 @@ export default function CreateTicket() {
 
   useEffect(() => {
     let cancelled = false;
+    setRefState("loading");
 
     Promise.all([fetchCategories(), fetchRelatedSystems()])
       .then(([cats, systems]) => {
@@ -80,7 +82,7 @@ export default function CreateTicket() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [referenceRevision]);
 
   function handleFilesSelected(e: React.ChangeEvent<HTMLInputElement>) {
     const incoming = Array.from(e.target.files ?? []);
@@ -163,7 +165,8 @@ export default function CreateTicket() {
       // BR-19/BR-20: entered values are NEVER cleared on failure.
       if (err instanceof CreateTicketValidationError) {
         setFieldErrors(err.fields);
-        setSubmitState("idle");
+        setSubmitErrorMessage("Review the highlighted fields.");
+        setSubmitState("error");
       } else {
         setSubmitErrorMessage(
           err instanceof Error
@@ -177,7 +180,7 @@ export default function CreateTicket() {
 
   if (submitState === "success" && createdTicket) {
     return (
-      <div className="container py-5" style={{ maxWidth: 720 }}>
+      <div className="container py-5" style={{ maxWidth: 720, overflowWrap: "anywhere" }}>
         <div
           className="p-4"
           style={{
@@ -241,7 +244,7 @@ export default function CreateTicket() {
   }
 
   return (
-    <div className="container py-5" style={{ maxWidth: 720 }}>
+    <div className="container py-5" style={{ maxWidth: 720, overflowWrap: "anywhere" }}>
       <h1 className="h4 mb-3" style={{ color: zenGreen.text }}>
         Create Ticket
       </h1>
@@ -252,7 +255,7 @@ export default function CreateTicket() {
 
       {refState === "error" && (
         <p role="alert" className="text-danger">
-          Couldn't load Categories or Related Systems. Please try again.
+          Couldn't load Categories or Related Systems. Please try again. <button type="button" className="btn btn-sm btn-outline-success" onClick={() => setReferenceRevision(value => value + 1)}>Retry reference data</button>
         </p>
       )}
 
@@ -305,6 +308,8 @@ export default function CreateTicket() {
 
                 <select
                   id="category"
+                  required aria-required="true" aria-invalid={Boolean(fieldErrors.categoryId)}
+                  aria-describedby={fieldErrors.categoryId ? "category-error" : undefined}
                   className={`form-select ${
                     fieldErrors.categoryId ? "is-invalid" : ""
                   }`}
@@ -323,7 +328,7 @@ export default function CreateTicket() {
                 </select>
 
                 {fieldErrors.categoryId && (
-                  <div className="invalid-feedback d-block">
+                  <div id="category-error" className="invalid-feedback d-block">
                     {fieldErrors.categoryId}
                   </div>
                 )}
@@ -339,6 +344,8 @@ export default function CreateTicket() {
 
                 <select
                   id="relatedSystem"
+                  required aria-required="true" aria-invalid={Boolean(fieldErrors.relatedSystemId)}
+                  aria-describedby={fieldErrors.relatedSystemId ? "relatedSystem-error" : undefined}
                   className={`form-select ${
                     fieldErrors.relatedSystemId ? "is-invalid" : ""
                   }`}
@@ -359,7 +366,7 @@ export default function CreateTicket() {
                 </select>
 
                 {fieldErrors.relatedSystemId && (
-                  <div className="invalid-feedback d-block">
+                  <div id="relatedSystem-error" className="invalid-feedback d-block">
                     {fieldErrors.relatedSystemId}
                   </div>
                 )}
@@ -376,6 +383,8 @@ export default function CreateTicket() {
 
                 <select
                   id="requestedPriority"
+                  required aria-required="true" aria-invalid={Boolean(fieldErrors.requestedPriority)}
+                  aria-describedby={fieldErrors.requestedPriority ? "requestedPriority-error" : undefined}
                   className={`form-select ${
                     fieldErrors.requestedPriority
                       ? "is-invalid"
@@ -398,7 +407,7 @@ export default function CreateTicket() {
                 </select>
 
                 {fieldErrors.requestedPriority && (
-                  <div className="invalid-feedback d-block">
+                  <div id="requestedPriority-error" className="invalid-feedback d-block">
                     {fieldErrors.requestedPriority}
                   </div>
                 )}
@@ -412,17 +421,20 @@ export default function CreateTicket() {
 
               <input
                 id="summary"
+                required aria-required="true" aria-invalid={Boolean(fieldErrors.summary)}
+                aria-describedby={fieldErrors.summary ? "summary-error" : "summary-hint"}
                 type="text"
                 className={`form-control ${
                   fieldErrors.summary ? "is-invalid" : ""
                 }`}
                 value={summary}
                 onChange={(e) => setSummary(e.target.value)}
-                maxLength={120}
+                maxLength={150}
               />
 
+              <p id="summary-hint" className="small text-muted mt-1 mb-0">{summary.length} / 150 characters</p>
               {fieldErrors.summary && (
-                <div className="invalid-feedback d-block">
+                <div id="summary-error" className="invalid-feedback d-block">
                   {fieldErrors.summary}
                 </div>
               )}
@@ -435,17 +447,20 @@ export default function CreateTicket() {
 
               <textarea
                 id="description"
+                required aria-required="true" aria-invalid={Boolean(fieldErrors.description)}
+                aria-describedby={fieldErrors.description ? "description-error" : "description-hint"}
                 className={`form-control ${
                   fieldErrors.description ? "is-invalid" : ""
                 }`}
                 rows={5}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                maxLength={2000}
+                maxLength={5000}
               />
 
+              <p id="description-hint" className="small text-muted mt-1 mb-0">{description.length} / 5000 characters</p>
               {fieldErrors.description && (
-                <div className="invalid-feedback d-block">
+                <div id="description-error" className="invalid-feedback d-block">
                   {fieldErrors.description}
                 </div>
               )}
@@ -463,6 +478,7 @@ export default function CreateTicket() {
               <input
                 ref={fileInputRef}
                 id="attachments"
+                aria-invalid={Boolean(fileError)} aria-describedby={fileError ? "attachments-error" : undefined}
                 type="file"
                 className="form-control"
                 accept=".jpg,.jpeg,.png,.webp,.pdf"
@@ -472,7 +488,7 @@ export default function CreateTicket() {
               />
 
               {fileError && (
-                <div className="text-danger small mt-1">
+                <div id="attachments-error" role="alert" className="text-danger small mt-1">
                   {fileError}
                 </div>
               )}

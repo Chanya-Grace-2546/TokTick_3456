@@ -35,13 +35,13 @@
 
 ## 3. Endpoints
 ### GET `/api/tickets/:ticketId/actions?page=1&pageSize=20`
-**Roles:** Requester on own Ticket; IT Staff/Admin on accessible Ticket.  
-**Response 200:** `{ "items": [ActionTaken], "page": 1, "pageSize": 20, "total": 3 }`.  
+**Roles:** Requester on own Ticket; IT Staff/Admin on accessible Ticket.
+**Response 200:** `{ "items": [ActionTaken], "page": 1, "pageSize": 20, "total": 3 }`.
 **Ordering:** `actionAt ASC, id ASC`. Page size defaults to 20, has a maximum of 50, and values above 50 return 400 `INVALID_QUERY`.
 **Errors:** 401, 404, 400 (pagination), 500.
 
 ### POST `/api/tickets/:ticketId/actions`
-**Roles:** IT Staff/Admin with access.  
+**Roles:** IT Staff/Admin with access.
 **Request:**
 ```json
 {
@@ -55,23 +55,23 @@
   "state": "PLANNED"
 }
 ```
-**Response 201:** `{ "action": ActionTaken }`.  
-**Validation:** nonblank description; `result` optional while PLANNED/IN_PROGRESS and required when entering COMPLETED (max 2000 characters); valid timestamp; valid enum; optional active staff/admin assignee; followUpNote nonblank if followUpRequired. No client-provided performedBy or Ticket Owner override.  
-**Errors:** 401, 403/404, 422, 409 (idempotency collision), 500.  
+**Response 201:** `{ "action": ActionTaken }`.
+**Validation:** nonblank description; `result` optional while PLANNED/IN_PROGRESS and required when entering COMPLETED (max 2000 characters); valid timestamp; valid enum; optional active IT Staff assignee (or unassigned); Administrator and Requester accounts are not eligible assignees; followUpNote nonblank if followUpRequired. No client-provided performedBy or Ticket Owner override.
+**Errors:** 401, 403/404, 422, 409 (idempotency collision), 500.
 **Retry:** Optional `Idempotency-Key` header unique per user + Ticket + request payload, retained for a defined server-side window (proposed 24h). Repeat same key/body returns original outcome, different body returns 409.
 
 ### PATCH `/api/tickets/:ticketId/actions/:actionId`
-**Roles:** IT Staff/Admin with access.  
+**Roles:** IT Staff/Admin with access.
 **Request:** partial editable fields plus mandatory `version`:
 ```json
 { "version": 2, "result": "Tested successfully", "state": "COMPLETED", "followUpRequired": false, "followUpNote": null }
 ```
-**Response 200:** `{ "action": ActionTaken }` with incremented version.  
-**Rules:** Action belongs to path Ticket; no edits to `id`, `ticketId`, `performedByUserId`, `createdAt`; allowed Action state transitions only; Completed/Cancelled Actions are immutable and reject PATCH; record append-only state audit event. Only active staff/admin assignees are accepted. `followUpRequired` must be explicitly set false after follow-up is addressed, and the note/outcome retained in audit.  
+**Response 200:** `{ "action": ActionTaken }` with incremented version.
+**Rules:** Action belongs to path Ticket; no edits to `id`, `ticketId`, `performedByUserId`, `createdAt`; allowed Action state transitions only; Completed/Cancelled Actions are immutable and reject PATCH; record append-only state audit event. Only active IT Staff assignees (or unassigned) are accepted; Administrator and Requester assignees are rejected. `followUpRequired` must be explicitly set false after follow-up is addressed, and the note/outcome retained in audit.
 **Errors:** 401, 403/404, 422, 409 stale version, 500.
 
 ### GET `/api/dashboard/requester`
-**Roles:** Requester only. No `userId` parameter.  
+**Roles:** Requester only. No `userId` parameter.
 **Response 200:**
 ```json
 {
@@ -86,11 +86,11 @@
   "drillDown": { "openTickets": "/tickets?statusGroup=open", "waitingForRequester": "/tickets?status=WAITING_FOR_REQUESTER" }
 }
 ```
-**Rules:** Scope all counts and arrays to authenticated requester; open-work status set from specification; max 5 recent items; recent = rolling 7 days; zero values and empty arrays if none. Hrefs use the documented existing Ticket Detail routes.  
+**Rules:** Scope all counts and arrays to authenticated requester; open-work status set from specification; max 5 recent items; recent = rolling 7 days; zero values and empty arrays if none. Hrefs use the documented existing Ticket Detail routes.
 **Errors:** 401, 403, 500.
 
 ### GET `/api/dashboard/staff`
-**Roles:** IT Staff/Admin.  
+**Roles:** IT Staff/Admin.
 **Response 200:**
 ```json
 {
@@ -102,14 +102,14 @@
   "drillDown": { "unassignedTickets": "/staff/tickets?owner=unassigned&statusGroup=open", "myOwnedTickets": "/staff/tickets?owner=me&statusGroup=open", "ticketsWithMyActions": "/staff/tickets?myAction=true", "urgentOpenTickets": "/staff/tickets?itPriority=HIGH&statusGroup=open" }
 }
 ```
-**Rules:** Staff sees authorized operational scope; Admin may reuse same view; status/priority zeros included for known enums; priority values must match actual Lab 3 schema. `ticketsWithMyActions` counts DISTINCT accessible Tickets containing at least one nonterminal Action assigned to the current staff member, not Action rows; `myAction=true` returns the same distinct Tickets. `urgentOpenTickets` counts HIGH IT-priority Tickets in the open-status group, matching the urgent drill-down.  
+**Rules:** Staff sees authorized operational scope; Admin may reuse same view; status/priority zeros included for known enums; priority values must match actual Lab 3 schema. `ticketsWithMyActions` counts DISTINCT accessible Tickets containing at least one nonterminal Action assigned to the current staff member, not Action rows; `myAction=true` returns the same distinct Tickets. `urgentOpenTickets` counts HIGH IT-priority Tickets in the open-status group, matching the urgent drill-down.
 **Errors:** 401, 403, 500.
 
 ### PATCH `/api/staff/tickets/:id/status` (existing Lab 3 route, extended)
-**Roles:** Per status matrix in specification.  
-**Request (existing Lab 3-compatible shape):** `{ "status": "RESOLVED", "expectedStatus": "IN_PROGRESS" }`. The existing Lab 3 endpoint accepts `{ "status": "WAITING_FOR_REQUESTER" }`; `expectedStatus` is optional and additive; do not send `reason` on this endpoint; do not require `version` from legacy callers. If an optional version is later added, its absence must remain valid.  
+**Roles:** Per status matrix in specification.
+**Request (existing Lab 3-compatible shape):** `{ "status": "RESOLVED", "expectedStatus": "IN_PROGRESS" }`. The existing Lab 3 endpoint accepts `{ "status": "WAITING_FOR_REQUESTER" }`; `expectedStatus` is optional and additive; do not send `reason` on this endpoint; do not require `version` from legacy callers. If an optional version is later added, its absence must remain valid.
 **Response 200:** `{ "id": 105, "status": "RESOLVED", "ownerId": null }`.
-**Rules:** transactional transition validation, role authorization, Action completion and follow-up gate; atomic cancellation of unfinished Actions when transitioning to CANCELLED; transactional revalidation of current Ticket status (without mandatory legacy version field); log actor/old/new status in append-only history; if optional `expectedStatus` differs from current status return 409 `STALE_UPDATE`. Requester apparent-resolution action is handled by existing Lab 3 API, and MUST NOT directly call this status update to resolve.  
+**Rules:** transactional transition validation, role authorization, Action completion and follow-up gate; atomic cancellation of unfinished Actions when transitioning to CANCELLED; transactional revalidation of current Ticket status (without mandatory legacy version field); log actor/old/new status in append-only history; if optional `expectedStatus` differs from current status return 409 `STALE_UPDATE`. Requester apparent-resolution action is handled by existing Lab 3 API, and MUST NOT directly call this status update to resolve.
 **Errors:** 401, 403, 404, 409, 422, 500.
 
 ## 4. Dashboard Query and Drill-Down Contract
@@ -133,7 +133,7 @@
 ## 6. Security, Conflict and Failure Handling
 - Validate path IDs, pagination and payload server-side; reject extra protected fields (`performedByUserId`, `createdAt`, `ticketId` in PATCH).
 - No mass assignment; use explicit DTO allowlists and parameterized Prisma queries.
-- Inactive assignee → 422 `INACTIVE_ASSIGNEE`; missing required follow-up or completion result → 422 `VALIDATION_ERROR`; invalid transition → 409 `INVALID_STATUS_TRANSITION` for existing Ticket status route (Lab 3 convention); Action validation may use 422; incomplete action or outstanding follow-up gate → 422 `RESOLUTION_BLOCKED`; stale version → 409 `STALE_UPDATE`.
+- Inactive IT Staff assignee → 422 `INACTIVE_ASSIGNEE`; non-IT-Staff assignee (including Administrator or Requester) → 422 `VALIDATION_ERROR`; missing required follow-up or completion result → 422 `VALIDATION_ERROR`; invalid transition → 409 `INVALID_STATUS_TRANSITION` for existing Ticket status route (Lab 3 convention); Action validation may use 422; incomplete action or outstanding follow-up gate → 422 `RESOLUTION_BLOCKED`; stale version → 409 `STALE_UPDATE`.
 - Server catches unexpected exceptions, logs safely and returns generic 500. Client retains entered form state after recoverable errors.
 - For stale writes, return `{ "error": "STALE_UPDATE" }` but no unauthorized record data.
 - Use transaction for Ticket status validation+update and Action state audit event.
