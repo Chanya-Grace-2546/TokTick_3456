@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ActionRequestError, createAction, fetchActions, updateAction } from "../../src/api.js";
+import { ActionRequestError, createAction, fetchActions, updateAction, fetchActionAssignees } from "../../src/api.js";
 import { action, body, page } from "./helpers/actionFixture.js";
 afterEach(() => vi.unstubAllGlobals());
 describe("Lab 4 Action API contract (AC-01/06/19/43)", () => {
@@ -27,4 +27,10 @@ describe("Lab 4 Action API contract (AC-01/06/19/43)", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("not json", { status: 500 })));
     await expect(fetchActions(42)).rejects.toBeInstanceOf(ActionRequestError);
   });
+});
+
+it("uses the Action-specific assignee endpoint with cookies", async () => {
+  const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify([]))); vi.stubGlobal("fetch", fetcher);
+  expect(await fetchActionAssignees()).toEqual([]);
+  expect(fetcher).toHaveBeenCalledWith(expect.stringContaining("/api/staff/action-assignees"), { credentials: "include" });
 });

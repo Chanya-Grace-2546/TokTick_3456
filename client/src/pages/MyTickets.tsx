@@ -1,8 +1,14 @@
 import { useAuth } from "../context/AuthContext.js";
-import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { fetchTickets, TicketListItem, TicketListParams, RequesterApiError, Priority } from "../api.js";
 import { ticketTableHeaderStyle, zenGreen } from "../theme.js";
+
+const statusLabels: Record<string, string> = {
+  NEW: "New", OPEN: "Open", IN_PROGRESS: "In Progress",
+  WAITING_FOR_REQUESTER: "Waiting for Requester", RESOLVED: "Resolved",
+  CLOSED: "Closed", REOPENED: "Reopened", CANCELLED: "Cancelled",
+};
 
 type ScreenState = "loading" | "error" | "ready" | "forbidden";
 type SortField = "ticketNumber" | "createdAt" | "updatedAt";
@@ -15,9 +21,9 @@ const cardStyle: React.CSSProperties = {
 };
 
 const PRIORITY_BADGE: Record<Priority, string> = {
-  LOW: "#0B7A46",
-  MEDIUM: "#B8860B",
-  HIGH: "#B3261E",
+  LOW: zenGreen.success,
+  MEDIUM: zenGreen.warningBackground,
+  HIGH: zenGreen.error,
 };
 
 const SORT_LABELS: Record<SortField, string> = {
@@ -32,6 +38,15 @@ const SORT_LABELS: Record<SortField, string> = {
 // Lab 3 — Requester identity now comes from the authenticated Session.
 export default function TicketsPlaceholder() {
   const navigate = useNavigate();
+  const location = useLocation();
+  useEffect(() => {
+    if (location.hash === "#ticket-search") document.getElementById("ticket-search")?.focus();
+  }, [location.hash]);
+  const sortTrigger = useRef<HTMLButtonElement>(null);
+  const sortId = useId();
+  const sortFocus = useRef<SortField>();
+  const headerButtons = useRef<Partial<Record<SortField, HTMLButtonElement | null>>>({});
+  const closeSort = () => { setSortMenuOpen(false); sortTrigger.current?.focus(); };
 
   const [state, setState] = useState<ScreenState>("loading");
   const [items, setItems] = useState<TicketListItem[]>([]);
@@ -70,11 +85,16 @@ export default function TicketsPlaceholder() {
       }else if(error instanceof RequesterApiError&&error.status===403)setState("forbidden");else setState("error");
     });return()=>{cancelled=true;};
   },[query,retry]);
-  function toggleSort(field:SortField){change({sortBy:field,sortDir:sortBy===field&&sortDir==="desc"?"asc":"desc"});}
+  useEffect(() => {
+    if (state !== "ready" || !sortFocus.current) return;
+    if (document.activeElement === document.body) headerButtons.current[sortFocus.current]?.focus();
+    sortFocus.current = undefined;
+  }, [state]);
+  function toggleSort(field:SortField, fromHeader = false){if (fromHeader) sortFocus.current = field; change({sortBy:field,sortDir:sortBy===field&&sortDir==="desc"?"asc":"desc"});}
   function clearFilters(){const next=new URLSearchParams({sortBy,sortDir,page:"1"});if(query.pageSize)next.set("pageSize",String(query.pageSize));setParams(next);}
 
   return (
-    <div className="container py-5" style={{ maxWidth: 960 }}>
+    <div className="container py-5" style={{ maxWidth: 1320 }}>
       <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
         <h1 className="h4 mb-0" style={{ color: zenGreen.text }}>
           My Tickets
@@ -104,6 +124,7 @@ export default function TicketsPlaceholder() {
         <div className="row g-2">
           <div className="col-12 col-md-6">
             <input
+              id="ticket-search"
               type="text"
               className="form-control"
               placeholder="Search by ticket number or summary…"
@@ -155,11 +176,13 @@ export default function TicketsPlaceholder() {
       </div>
 
       <div className="d-flex justify-content-between align-items-center mb-3">
-        <div className="position-relative">
+        <div className="position-relative" onKeyDown={event => { if (event.key === "Escape" && sortMenuOpen) { event.preventDefault(); closeSort(); } }}>
           <button
             type="button"
             className="btn btn-sm btn-outline-secondary"
             onClick={() => setSortMenuOpen((v) => !v)}
+            ref={sortTrigger}
+            aria-controls={sortId}
             aria-expanded={sortMenuOpen}
           >
             Sort: {SORT_LABELS[sortBy]} ({sortDir === "asc" ? "▲" : "▼"})
@@ -167,7 +190,8 @@ export default function TicketsPlaceholder() {
 
           {sortMenuOpen && (
             <div
-              role="menu"
+              id={sortId}
+              role="group" aria-label="Ticket sorting"
               className="position-absolute start-0 mt-1 bg-white shadow rounded"
               style={{ minWidth: 220, zIndex: 10 }}
             >
@@ -175,7 +199,6 @@ export default function TicketsPlaceholder() {
                 <button
                   key={field}
                   type="button"
-                  role="menuitem"
                   className="btn btn-sm w-100 text-start d-flex justify-content-between"
                   style={
                     sortBy === field
@@ -184,7 +207,7 @@ export default function TicketsPlaceholder() {
                   }
                   onClick={() => {
                     toggleSort(field);
-                    setSortMenuOpen(false);
+                    closeSort();
                   }}
                 >
                   <span>{SORT_LABELS[field]}</span>
@@ -241,45 +264,34 @@ export default function TicketsPlaceholder() {
       {state === "ready" && items.length > 0 && (
         <>
           <div
-            className="table-responsive d-none d-lg-block"
-            style={{ ...cardStyle, borderRadius: 10, overflow: "hidden" }}
+            className="table-responsive requester-ticket-scroll d-none d-lg-block"
+            role="region" aria-label="My Tickets table" tabIndex={0}
+            style={{ ...cardStyle, borderRadius: 10 }}
           >
-            <table className="table mb-0">
+            <table className="table mb-0 requester-ticket-table">
               <thead>
                 <tr>
-                  <th
-                    style={ticketTableHeaderStyle}
-                    role="button"
-                    onClick={() => toggleSort("ticketNumber")}
-                  >
-                    Ticket No.{" "}
-                    {sortBy === "ticketNumber" &&
-                      (sortDir === "asc" ? "▲" : "▼")}
+                  <th scope="col" style={ticketTableHeaderStyle} aria-sort={sortBy === "ticketNumber" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}>
+                    <button type="button" className="ticket-sort-button" ref={node => { headerButtons.current.ticketNumber = node; }} onClick={() => toggleSort("ticketNumber", true)}>
+                      Ticket No. {sortBy === "ticketNumber" && (sortDir === "asc" ? "▲" : "▼")}
+                    </button>
                   </th>
 
-                  <th style={ticketTableHeaderStyle}>Summary</th>
-                  <th style={ticketTableHeaderStyle}>Category</th>
-                  <th style={ticketTableHeaderStyle}>Priority</th>
-                  <th style={ticketTableHeaderStyle}>Status</th>
+                  <th scope="col" style={ticketTableHeaderStyle}>Summary</th>
+                  <th scope="col" style={ticketTableHeaderStyle}>Category</th>
+                  <th scope="col" style={ticketTableHeaderStyle}>Priority</th>
+                  <th scope="col" style={ticketTableHeaderStyle}>Status</th>
 
-                  <th
-                    style={ticketTableHeaderStyle}
-                    role="button"
-                    onClick={() => toggleSort("createdAt")}
-                  >
-                    Created Date{" "}
-                    {sortBy === "createdAt" &&
-                      (sortDir === "asc" ? "▲" : "▼")}
+                  <th scope="col" style={ticketTableHeaderStyle} aria-sort={sortBy === "createdAt" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}>
+                    <button type="button" className="ticket-sort-button" ref={node => { headerButtons.current.createdAt = node; }} onClick={() => toggleSort("createdAt", true)}>
+                      Created Date {sortBy === "createdAt" && (sortDir === "asc" ? "▲" : "▼")}
+                    </button>
                   </th>
 
-                  <th
-                    style={ticketTableHeaderStyle}
-                    role="button"
-                    onClick={() => toggleSort("updatedAt")}
-                  >
-                    Last Updated{" "}
-                    {sortBy === "updatedAt" &&
-                      (sortDir === "asc" ? "▲" : "▼")}
+                  <th scope="col" style={ticketTableHeaderStyle} aria-sort={sortBy === "updatedAt" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}>
+                    <button type="button" className="ticket-sort-button" ref={node => { headerButtons.current.updatedAt = node; }} onClick={() => toggleSort("updatedAt", true)}>
+                      Last Updated {sortBy === "updatedAt" && (sortDir === "asc" ? "▲" : "▼")}
+                    </button>
                   </th>
                 </tr>
               </thead>
@@ -289,9 +301,9 @@ export default function TicketsPlaceholder() {
                   <tr
                     key={t.id}
                     style={{ cursor: "pointer" }}
-                    onClick={() => navigate(`/tickets/${t.id}`)}
+                    onClick={event => { if (!(event.target as HTMLElement).closest("a")) navigate(`/tickets/${t.id}`); }}
                   >
-                    <td>{t.ticketNumber}</td>
+                    <td><Link to={`/tickets/${t.id}`} aria-label={`Open ticket ${t.ticketNumber}`}>{t.ticketNumber}</Link></td>
                     <td>{t.summary}</td>
                     <td>{t.category}</td>
 
@@ -301,13 +313,14 @@ export default function TicketsPlaceholder() {
                         style={{
                           backgroundColor:
                             PRIORITY_BADGE[t.requestedPriority],
+                          color: t.requestedPriority === "MEDIUM" ? zenGreen.text : "white",
                         }}
                       >
                         {t.requestedPriority}
                       </span>
                     </td>
 
-                    <td>{t.currentStatus}</td>
+                    <td>{statusLabels[t.currentStatus] ?? t.currentStatus}</td>
                     <td>{new Date(t.createdAt).toLocaleDateString()}</td>
                     <td>{new Date(t.updatedAt).toLocaleDateString()}</td>
                   </tr>
@@ -341,7 +354,7 @@ export default function TicketsPlaceholder() {
                       >
                         Ticket Number
                       </div>
-                      <div style={{ fontWeight: 600 }}>
+                      <div className="ticket-link-label" style={{ fontWeight: 600 }}>
                         {t.ticketNumber}
                       </div>
                     </div>
@@ -378,6 +391,7 @@ export default function TicketsPlaceholder() {
                         style={{
                           backgroundColor:
                             PRIORITY_BADGE[t.requestedPriority],
+                          color: t.requestedPriority === "MEDIUM" ? zenGreen.text : "white",
                         }}
                       >
                         {t.requestedPriority}
@@ -391,7 +405,7 @@ export default function TicketsPlaceholder() {
                       >
                         Status
                       </div>
-                      <div>{t.currentStatus}</div>
+                      <div>{statusLabels[t.currentStatus] ?? t.currentStatus}</div>
                     </div>
 
                     <div className="col-6">

@@ -39,9 +39,9 @@ beforeEach(async () => { ticket = await actionTicket(requester.user.id, admin.us
 describe("Action API: creation, visibility and audit (API-01/02/04, AUTH-01/03)", () => {
   it("creates as another staff-owned Ticket contributor without changing the Ticket", async () => {
     const before = await prisma.ticket.findUniqueOrThrow({ where: { id: ticket.id } });
-    const action = await created({ assignedToUserId: admin.user.id, attachmentNotes: "See photo" });
+    const action = await created({ assignedToUserId: staff.user.id, attachmentNotes: "See photo" });
     expect(action).toMatchObject({ ticketId: ticket.id, state: "PLANNED", version: 1, result: null,
-      performedBy: { id: staff.user.id, name: staff.user.name }, assignedTo: { id: admin.user.id, name: admin.user.name } });
+      performedBy: { id: staff.user.id, name: staff.user.name }, assignedTo: { id: staff.user.id, name: staff.user.name } });
     expect(Object.keys(action).sort()).toEqual(["id", "ticketId", "actionAt", "description", "result", "performedBy", "assignedTo", "followUpRequired", "followUpNote", "attachmentNotes", "state", "version", "createdAt", "updatedAt", "followUpResolution"].sort());
     expect(await prisma.ticket.findUniqueOrThrow({ where: { id: ticket.id } })).toEqual(before);
     const history = await prisma.actionTakenHistory.findMany({ where: { actionId: action.id } });
@@ -127,7 +127,7 @@ describe("Authentication and validation (API-03/13/15, ACTION-ASSIGN-01)", () =>
     for (const query of ["page=0", "page=1&page=2", "unknown=x", "pageSize=2147483648"]) expect((await read(staff, `${url()}?${query}`)).status).toBe(400);
   });
   it("rejects missing/ineligible/inactive assignees", async () => {
-    for (const id of [2147483647, requester.user.id]) {
+    for (const id of [2147483647, requester.user.id, admin.user.id]) {
       const res = await post({ description: "x", assignedToUserId: id });
       expect(res.status).toBe(422); expect(res.body.fields.assignedToUserId).toBeDefined();
     }
@@ -304,4 +304,41 @@ describe("Transactional durable idempotency (API-10/17, ACTION-AUDIT-01)", () =>
     expect((await request(app).delete(`${url()}/${action.id}`).set("Cookie", staff.cookie).set("Origin", origin)).status).toBe(404);
     expect(await prisma.actionTakenHistory.count({ where: { actionId: action.id } })).toBe(1);
   });
+});
+
+it("returns only active IT Staff for Action assignment while preserving Ticket owner choices", async () => {
+  for (const actor of [staff, admin]) {
+    const result = await request(app).get("/api/staff/action-assignees").set("Cookie", actor.cookie);
+    expect(result.status).toBe(200);
+    expect(result.body).toEqual(expect.arrayContaining([expect.objectContaining({ id: staff.user.id, role: "IT_STAFF" })]));
+    expect(result.body.every((person: { role: string }) => person.role === "IT_STAFF")).toBe(true);
+    for (const id of [admin.user.id, requester.user.id, inactive.user.id]) expect(result.body.map((person: { id: number }) => person.id)).not.toContain(id);
+    const owners = await request(app).get("/api/staff/owners").set("Cookie", actor.cookie);
+    expect(owners.body.map((person: { id: number }) => person.id)).toContain(admin.user.id);
+  }
+  expect((await request(app).get("/api/staff/action-assignees")).status).toBe(401);
+  expect((await request(app).get("/api/staff/action-assignees").set("Cookie", requester.cookie)).status).toBe(403);
+});
+it("rejects Administrator/Requester reassignment without changing Action or history", async () => {
+  const saved = await created({ assignedToUserId: staff.user.id });
+  const before = await prisma.actionTaken.findUniqueOrThrow({ where: { id: saved.id } });
+  const history = await prisma.actionTakenHistory.findMany({ where: { actionId: saved.id }, orderBy: { id: "asc" } });
+  for (const id of [admin.user.id, requester.user.id]) {
+    const result = await patch(saved.id, { version: saved.version, assignedToUserId: id }, admin);
+    expect(result.status).toBe(422);
+    expect(result.body).toEqual({ error: "VALIDATION_ERROR", fields: { assignedToUserId: "Choose an active IT Staff member or Unassigned." } });
+  }
+  expect(await prisma.actionTaken.findUniqueOrThrow({ where: { id: saved.id } })).toEqual(before);
+  expect(await prisma.actionTakenHistory.findMany({ where: { actionId: saved.id }, orderBy: { id: "asc" } })).toEqual(history);
+  const cleared = await patch(saved.id, { version: saved.version, assignedToUserId: null }, admin);
+  expect(cleared.status).toBe(200); expect(cleared.body.action.assignedTo).toBeNull();
+});
+
+it("lists legacy Administrator assignees without rewriting completed Action or history", async () => {
+  const legacy = await prisma.actionTaken.create({ data: { ticketId: ticket.id, performedByUserId: staff.user.id, assignedToUserId: admin.user.id, description: "Legacy work", state: "COMPLETED", result: "Done" } });
+  const event = await prisma.actionTakenHistory.create({ data: { actionId: legacy.id, actorUserId: staff.user.id, newState: "COMPLETED", afterJson: { legacy: true } } });
+  const response = await read(); expect(response.status).toBe(200);
+  expect(response.body.items.find((row: { id: number }) => row.id === legacy.id).assignedTo).toEqual({ id: admin.user.id, name: admin.user.name });
+  expect(await prisma.actionTaken.findUniqueOrThrow({ where: { id: legacy.id } })).toEqual(legacy);
+  expect(await prisma.actionTakenHistory.findMany({ where: { actionId: legacy.id } })).toEqual([event]);
 });

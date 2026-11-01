@@ -45,7 +45,7 @@ test("E2E-04 IT Staff queue and operational ticket detail", async ({ page }, tes
 
   await expect(page.getByText("Requested Priority", { exact: true })).toBeVisible();
   await expect(page.getByLabel("IT Priority")).toBeVisible();
-  await expect(page.getByLabel("Status")).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Status", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: /public comments/i })).toBeVisible();
   await expect(page.getByRole("heading", { name: /internal notes/i })).toBeVisible();
 
@@ -58,7 +58,7 @@ test("E2E-04 IT Staff queue and operational ticket detail", async ({ page }, tes
   await page.getByLabel("IT Priority").selectOption("HIGH");
   await page.getByRole("button", { name: "Save IT Priority" }).click();
   await expect(page.getByText("IT Priority updated.")).toBeVisible();
-  await page.getByLabel("Status", { exact: true }).selectOption("IN_PROGRESS");
+  await page.getByRole("combobox", { name: "Status", exact: true }).selectOption("IN_PROGRESS");
   await page.getByRole("button", { name: "Change Status" }).click();
   await expect(page.getByText("Status changed to In Progress.")).toBeVisible();
 

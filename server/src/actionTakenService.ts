@@ -93,8 +93,8 @@ async function assignee(tx: Prisma.TransactionClient, userId: number | null | un
   if (userId == null) return;
   await tx.$queryRaw`SELECT id FROM "User" WHERE id=${userId} FOR SHARE`;
   const user = await tx.user.findUnique({ where: { id: userId }, select: { role: true, isActive: true } });
-  if (!user || (user.role !== "IT_STAFF" && user.role !== "ADMINISTRATOR")) {
-    throw new ActionError(422, "VALIDATION_ERROR", { assignedToUserId: "Choose an eligible IT Staff or Administrator." });
+  if (!user || user.role !== "IT_STAFF") {
+    throw new ActionError(422, "VALIDATION_ERROR", { assignedToUserId: "Choose an active IT Staff member or Unassigned." });
   }
   if (!user.isActive) throw new ActionError(422, "INACTIVE_ASSIGNEE", { assignedToUserId: "Choose an active assignee." });
 }

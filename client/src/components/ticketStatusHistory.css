@@ -1,0 +1,9 @@
+.ticket-status-history { min-width: 0; border-radius: 10px; overflow-wrap: anywhere; }
+.ticket-status-history h2 { font-size: 1.25rem; }
+.ticket-status-history ol { list-style: none; padding: 0 0 0 .75rem; margin: .5rem 0 0; }
+.ticket-status-history li { position: relative; border-left: 2px solid var(--history-green); padding: 0 0 1rem 1.15rem; }
+.ticket-status-history li::before { content: ""; position: absolute; left: -5px; top: .35rem; width: 8px; height: 8px; border-radius: 50%; background: var(--history-green); }
+.ticket-status-history li:last-child { padding-bottom: 0; }
+.ticket-status-history p { margin-bottom: .25rem; }
+.ticket-status-history .history-transition { font-weight: 600; }
+.ticket-status-history time { font-size: .85rem; color: #52655b; }

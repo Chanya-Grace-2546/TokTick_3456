@@ -22,7 +22,8 @@ export default function ActionTakenForm(props: Props) {
   useEffect(() => { heading.current?.focus(); }, []);
   const frozen = ambiguous || expired;
   const invalidState = !!base && !actionStates(base.state).includes(draft.state);
-  const ineligible = !!draft.assignedToUserId && !props.owners.some(owner => String(owner.id) === draft.assignedToUserId);
+  const eligibleAssignees = props.owners.filter(owner => owner.role === "IT_STAFF" && (!("isActive" in owner) || owner.isActive === true));
+  const ineligible = !!draft.assignedToUserId && !eligibleAssignees.some(owner => String(owner.id) === draft.assignedToUserId);
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (busy.current || conflict || expired || (props.readOnly && !ambiguous) || (base && terminalAction(base.state))) return;
@@ -89,7 +90,7 @@ export default function ActionTakenForm(props: Props) {
       {text("description", "Description", true)}{text("result", "Result", draft.state === "COMPLETED")}
       <div className="mb-3"><label htmlFor={`${prefix}-assigned`} className="form-label">Assigned To</label><select id={`${prefix}-assigned`} className="form-select" value={draft.assignedToUserId} aria-invalid={!!errors.assignedToUserId} aria-describedby={errors.assignedToUserId ? `${prefix}-assignedToUserId-error` : undefined} onChange={e => setDraft({ ...draft, assignedToUserId: e.target.value })}>
         <option value="">Unassigned</option>{ineligible && <option value={draft.assignedToUserId} disabled>{base?.assignedTo?.name ?? "Previous assignee"} (no longer eligible)</option>}
-        {props.owners.map(owner => <option key={owner.id} value={owner.id}>{owner.name} ({owner.role === "ADMINISTRATOR" ? "Administrator" : "IT Staff"})</option>)}</select>{fieldError("assignedToUserId")}</div>
+        {eligibleAssignees.map(owner => <option key={owner.id} value={owner.id}>{owner.name} (IT Staff)</option>)}</select>{fieldError("assignedToUserId")}</div>
       <div className="form-check mb-3"><input id={`${prefix}-follow`} type="checkbox" className="form-check-input" checked={draft.followUpRequired} onChange={e => setDraft({ ...draft, followUpRequired: e.target.checked })} /><label htmlFor={`${prefix}-follow`} className="form-check-label">Follow-Up Required</label></div>
       {text("followUpNote", "Follow-Up Note", draft.followUpRequired)}{text("attachmentNotes", "Attachment Notes")}
       <p className="text-muted">Attachment Notes describe existing Ticket attachments; they do not upload files. Turning follow-up off preserves your note.</p>

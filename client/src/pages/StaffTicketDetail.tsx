@@ -1,3 +1,4 @@
+import TicketStatusHistory from "../components/TicketStatusHistory.js";
 import "./ticketDetail.css";
 import ActionsTaken from "../components/ActionsTaken.js";
 import { useEffect, useRef, useState } from "react";
@@ -12,6 +13,7 @@ import {
   createPublicComment,
   downloadAttachment,
   fetchStaffOwners,
+  fetchActionAssignees,
   fetchStaffTicketDetail,
   Priority,
   StaffOwner,
@@ -57,7 +59,7 @@ const internalPanelStyle: React.CSSProperties = {
 
 const PRIORITY_COLORS: Record<Priority, string> = {
   LOW: "#0B7A46",
-  MEDIUM: "#B8860B",
+  MEDIUM: zenGreen.warningBackground,
   HIGH: "#B3261E",
 };
 
@@ -152,6 +154,7 @@ function PriorityBadge({
       style={{
         backgroundColor:
           PRIORITY_COLORS[priority],
+        color: priority === "MEDIUM" ? zenGreen.text : "white",
       }}
     >
       {label(priority)}
@@ -216,6 +219,7 @@ export default function StaffTicketDetail() {
   const [owners, setOwners] = useState<
     StaffOwner[]
   >([]);
+  const [actionAssignees, setActionAssignees] = useState<StaffOwner[]>([]);
   const [selectedOwnerId, setSelectedOwnerId] =
     useState("");
   const [selectedPriority, setSelectedPriority] =
@@ -280,14 +284,16 @@ export default function StaffTicketDetail() {
     setOperationError("");
 
     try {
-      const [detail, ownerRows] =
+      const [detail, ownerRows, assignees] =
         await Promise.all([
           fetchStaffTicketDetail(ticketId),
           fetchStaffOwners(),
+          fetchActionAssignees(),
         ]);
 
       setTicket(detail);
       setOwners(ownerRows);
+      setActionAssignees(assignees);
       setSelectedOwnerId(
         detail.owner
           ? String(detail.owner.id)
@@ -1392,7 +1398,8 @@ export default function StaffTicketDetail() {
           setSelectedStatus("");
         } catch (error) { if (stillCurrent() && !(await handleAuthFailure(error))) setOperationError("Could not reload Ticket status. Your drafts are retained."); }
       }}>Reload and Review Ticket Status</button>}
-      <ActionsTaken ticketStatus={ticket.status} refreshKey={actionsRevision} key={ticket.id} ticketId={ticket.id} canWrite={user?.role === "IT_STAFF" || user?.role === "ADMINISTRATOR"} owners={owners}
+      <TicketStatusHistory key={`history-${ticket.id}`} ticketId={ticket.id} refreshKey={actionsRevision} />
+      <ActionsTaken ticketStatus={ticket.status} refreshKey={actionsRevision} key={ticket.id} ticketId={ticket.id} canWrite={user?.role === "IT_STAFF" || user?.role === "ADMINISTRATOR"} owners={actionAssignees}
         onRefresh={async () => {
           try {
             const latest = await fetchStaffTicketDetail(ticket.id);
@@ -1405,7 +1412,7 @@ export default function StaffTicketDetail() {
             throw error;
           }
         }}
-        onRefreshOwners={() => { void fetchStaffOwners().then(setOwners).catch(() => setOperationError("Could not refresh eligible staff. Please reload the Ticket.")); }} />
+        onRefreshOwners={() => { void fetchActionAssignees().then(setActionAssignees).catch(() => setOperationError("Could not refresh eligible staff. Please reload the Ticket.")); }} />
     </div>
   );
 }

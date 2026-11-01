@@ -44,7 +44,7 @@ Columns or stacked cards: Action Date/Time, Description, Result, Performed By, A
 
 ### 4.2 Create mode (Staff/Admin)
 - `Add Action` button opens inline panel or accessible modal consistent with existing UI.
-- Inputs: Action Date/Time (default current local time, converted to UTC), Description (required), Result (required when completing), Assigned To (active staff only), Follow-Up Required (checkbox), Follow-Up Note (conditionally required), Attachment Notes (optional), State (approved enum).
+- Inputs: Action Date/Time (default current local time, converted to UTC), Description (required), Result (required when completing), Assigned To (active IT Staff only, or Unassigned; exclude Administrators, Requesters and inactive users), Follow-Up Required (checkbox), Follow-Up Note (conditionally required), Attachment Notes (optional), State (approved enum).
 - Performed By is displayed as `You`/authenticated name and is read-only; never sent as authoritative user ID.
 - Inline field errors, submit disabled during pending request, Cancel retains safe navigation, success updates Action list and Ticket summary.
 - If follow-up toggles false, warn before clearing entered note or preserve draft until submit; submitted note should follow agreed rule.

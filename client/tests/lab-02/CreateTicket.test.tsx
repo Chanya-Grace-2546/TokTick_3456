@@ -401,3 +401,17 @@ describe("CreateTicket", () => {
     ).toBeInTheDocument();
   });
 });
+describe('Issue 9 Create Ticket accessibility',()=>{
+ beforeEach(()=>vi.restoreAllMocks());
+ it('associates server errors with required fields while preserving input',async()=>{
+  mockReferenceData();vi.spyOn(api,'createTicket').mockRejectedValue(new api.CreateTicketValidationError({summary:'Review summary',description:'Review description',categoryId:'Review category',relatedSystemId:'Review system',requestedPriority:'Review priority'}));renderScreen();await fillValidForm();fireEvent.click(screen.getByRole('button',{name:'Submit Ticket'}));await screen.findByRole('alert');
+  for(const [label,message] of [[/^category/i,'Review category'],[/related system/i,'Review system'],[/requested priority/i,'Review priority'],[/summary/i,'Review summary'],[/description/i,'Review description']] as const){const input=screen.getByLabelText(label);expect(input).toBeRequired();expect(input).toHaveAttribute('aria-invalid','true');expect(input).toHaveAccessibleDescription(message);}
+  expect(screen.getByLabelText(/summary/i)).toHaveValue('Laptop battery drains quickly');
+ });
+ it('exposes the existing 150/5000 limits and submits valid boundary lengths',async()=>{
+  mockReferenceData();const create=vi.spyOn(api,'createTicket').mockResolvedValue(ticket(42,'TKT-42'));renderScreen();await fillValidForm();const summary=screen.getByLabelText(/summary/i),description=screen.getByLabelText(/description/i);expect(summary).toHaveAttribute('maxlength','150');expect(description).toHaveAttribute('maxlength','5000');expect(summary).toHaveAccessibleDescription(expect.stringContaining('/ 150 characters'));fireEvent.change(summary,{target:{value:'S'.repeat(150)}});fireEvent.change(description,{target:{value:'D'.repeat(5000)}});fireEvent.click(screen.getByRole('button',{name:'Submit Ticket'}));await screen.findByText('Ticket submitted');expect(create).toHaveBeenCalledWith(expect.objectContaining({summary:'S'.repeat(150),description:'D'.repeat(5000)}));
+ });
+ it('retries failed reference loading without remounting the page',async()=>{
+  const categories=vi.spyOn(api,'fetchCategories').mockRejectedValue(new Error('offline'));vi.spyOn(api,'fetchRelatedSystems').mockResolvedValue([{id:1,name:'Hardware'}]);renderScreen();await screen.findByRole('alert');categories.mockResolvedValue([{id:1,name:'Hardware'}]);fireEvent.click(screen.getByRole('button',{name:'Retry reference data'}));await screen.findByLabelText(/^category/i);expect(categories).toHaveBeenCalledTimes(2);expect(screen.getByRole('heading',{name:'Create Ticket'})).toBeInTheDocument();
+ });
+});

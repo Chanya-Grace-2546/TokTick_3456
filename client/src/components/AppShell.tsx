@@ -1,5 +1,10 @@
+import "./zenGreen.css";
 import {
   ReactNode,
+  type CSSProperties,
+  useEffect,
+  useId,
+  useRef,
   useState,
 } from "react";
 import {
@@ -34,6 +39,11 @@ export default function AppShell({
     setMobileNavOpen,
   ] = useState(false);
 
+  const accountTrigger = useRef<HTMLButtonElement>(null);
+  const mobileTrigger = useRef<HTMLButtonElement>(null);
+  const accountId = useId(), mobileId = useId();
+  useEffect(() => { setMenuOpen(false); setMobileNavOpen(false); }, [location.pathname]);
+
   const isActive = (
     path: string
   ) =>
@@ -61,13 +71,24 @@ export default function AppShell({
 
   return (
     <div
+      className="zen-app"
       style={{
+        "--zen-primary": zenGreen.primary,
+        "--zen-secondary": zenGreen.secondary,
+        "--zen-pale": zenGreen.pale,
+        "--zen-text": zenGreen.text,
         minHeight: "100vh",
         backgroundColor:
           zenGreen.background,
-      }}
+      } as CSSProperties}
     >
       <header
+        className="app-header"
+        onKeyDown={event => {
+          if (event.key !== "Escape") return;
+          if (menuOpen) { event.preventDefault(); setMenuOpen(false); accountTrigger.current?.focus(); }
+          if (mobileNavOpen) { event.preventDefault(); setMobileNavOpen(false); mobileTrigger.current?.focus(); }
+        }}
         style={{
           backgroundColor:
             zenGreen.primary,
@@ -183,6 +204,8 @@ export default function AppShell({
                         !value
                     )
                   }
+                  ref={accountTrigger}
+                  aria-controls={accountId}
                   title={user.name}
                   aria-expanded={
                     menuOpen
@@ -193,7 +216,8 @@ export default function AppShell({
 
                 {menuOpen && (
                   <div
-                    className="position-absolute end-0 mt-1 bg-white shadow rounded"
+                    id={accountId}
+                    className="position-absolute end-0 mt-1 bg-white shadow rounded account-panel"
                     style={{
                       minWidth: 220,
                       zIndex: 10,
@@ -261,6 +285,8 @@ export default function AppShell({
             aria-expanded={
               mobileNavOpen
             }
+            ref={mobileTrigger}
+            aria-controls={mobileId}
             aria-label="Toggle navigation"
           >
             ☰
@@ -269,7 +295,8 @@ export default function AppShell({
 
         {mobileNavOpen && (
           <div
-            className="d-md-none px-3 pb-3"
+            id={mobileId}
+            className="d-md-none px-3 pb-3 mobile-nav-panel"
             style={{
               backgroundColor:
                 zenGreen.primary,

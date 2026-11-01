@@ -37,7 +37,7 @@ export default function StaffDashboard() {
       <button className="btn dashboard-refresh" disabled={loading} onClick={() => setRevision(n => n + 1)}><DashboardIcon name="refresh"/>Refresh Dashboard</button>
     </header>
     <div className="dashboard-toolbar">
-      <nav aria-label="Dashboard quick actions"><Link to="/staff/tickets">Ticket Queue <span aria-hidden="true">↗</span></Link><Link to="/staff/tickets?owner=me&statusGroup=open">My Assigned Tickets <span aria-hidden="true">↗</span></Link></nav>
+      <nav aria-label="Dashboard quick actions"><Link to="/staff/tickets#queue-search">Search Tickets <span aria-hidden="true">↗</span></Link><Link to="/staff/tickets?owner=me">My Queue <span aria-hidden="true">↗</span></Link></nav>
       {data && <p className="dashboard-updated" role="status">Last updated: <time dateTime={data.asOf}>{time(data.asOf)}</time> <span>(Asia/Bangkok)</span></p>}
     </div>
     {loading && <p role="status" className="dashboard-feedback">Loading dashboard…</p>}

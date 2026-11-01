@@ -53,7 +53,7 @@ Automatic SLA/escalation, external notifications, inventory/purchasing, timeshee
 | FR-16 | Staff/Admin can view one Action Taken in detail, including performer, assignment, timestamps, state and follow-up fields. |
 | FR-17 | Action list pagination, filtering and stable ordering must follow the approved API contract. |
 | FR-18 | Action creation and editing distinguish server-controlled fields from editable user fields. |
-| FR-19 | Action assignment selects only active eligible IT Staff/Admin users. |
+| FR-19 | Action assignment selects only active IT Staff users, or remains unassigned; Administrator and Requester accounts are not eligible. |
 | FR-20 | Action state changes record actor and event history without erasing earlier audit entries. |
 | FR-21 | Action cancellation and completion require approved transitions and provide clear confirmation feedback. |
 | FR-22 | Ticket Detail refreshes Action list and Ticket summary after successful operations. |
@@ -111,7 +111,7 @@ Automatic SLA/escalation, external notifications, inventory/purchasing, timeshee
 | BR-03 | `performedByUserId` is assigned by the server from the authenticated session; never accepted from client input. |
 | BR-04 | `followUpNote` is required and nonblank when `followUpRequired=true`; otherwise it may be null. |
 | BR-05 | Action date/time must be valid ISO-8601 and persisted in UTC; display in user-local time. |
-| BR-06 | Only active IT Staff/Admin may be assigned to an Action. |
+| BR-06 | Only active IT Staff may be assigned to an Action; assignment may be null. Administrator and Requester accounts are not eligible assignees. |
 | BR-07 | Action state is `Planned`, `In Progress`, `Completed`, or `Cancelled` (approved Sprint 4 decision); a terminal action cannot be reactivated without an explicitly approved rule. |
 | BR-08 | Each Action retains immutable `id`, `ticketId`, `performedByUserId`, `createdAt`; edits update `updatedAt` and `version`. |
 | BR-09 | Action records are not hard-deleted through the API. Action history/audit events are append-only. |
@@ -126,7 +126,7 @@ Automatic SLA/escalation, external notifications, inventory/purchasing, timeshee
 | BR-18 | Duplicate submissions must be prevented by disabled pending controls and safe server retry handling; clients may send an idempotency key for Action creation. |
 | BR-19 | Requesters can view all Action Taken fields on their own Tickets. Internal Notes remain a separate staff-private resource. |
 | BR-20 | Legacy Tickets and related Users, Attachments, Public Comments and Internal Notes must survive migration unchanged. |
-| BR-21 | Any authorized IT Staff/Admin with Ticket access may create an Action and assign it only to an active IT Staff/Admin; Action performer is always the authenticated creator, independently of assignee and Ticket Owner. |
+| BR-21 | Any authorized IT Staff/Admin with Ticket access may create an Action and assign it only to an active IT Staff member (or leave it unassigned); Action performer is always the authenticated creator, independently of assignee and Ticket Owner. |
 | BR-22 | Once an Action reaches `Completed` or `Cancelled`, it is read-only and cannot be reactivated, edited or deleted. Its audit history remains accessible to authorized roles. |
 | BR-23 | Cancelling a Ticket atomically changes each of its `Planned`/`In Progress` Actions to `Cancelled`, records the actor and timestamp for each change, and retains completed/cancelled Actions and audit history. |
 | BR-24 | An Action with `followUpRequired=true` is outstanding until cleared while nonterminal or, after completion, satisfied by an append-only `FOLLOW_UP_SATISFIED` history event with a nonblank outcome; a Ticket cannot be Resolved while any non-cancelled Action has outstanding follow-up. |
@@ -149,7 +149,7 @@ Automatic SLA/escalation, external notifications, inventory/purchasing, timeshee
 This matrix preserves the transitions recorded in the supplied Lab 3 `statusTransitions.ts`; the exact role restrictions remain subject to the existing backend policy and must be verified before implementation. All unlisted transitions are rejected. No transition happens as a side effect of a Requester's apparent-resolution indication. The UI offers only transitions the API permits, but the API enforces them independently.
 
 ### 7.2 Action state transitions (approved)
-`Planned → In Progress | Completed | Cancelled`; `In Progress → Completed | Cancelled`; `Completed` and `Cancelled` are terminal and immutable. Every transition records an append-only audit event. Authorized staff can create and assign Actions independently of Ticket ownership; assignment is limited to active IT Staff/Admin. Ticket cancellation atomically cancels only unfinished Actions, preserving completed/cancelled Actions and all history.
+`Planned → In Progress | Completed | Cancelled`; `In Progress → Completed | Cancelled`; `Completed` and `Cancelled` are terminal and immutable. Every transition records an append-only audit event. Authorized staff can create and assign Actions independently of Ticket ownership; assignment is limited to active IT Staff or unassigned. Ticket cancellation atomically cancels only unfinished Actions, preserving completed/cancelled Actions and all history.
 
 **Resolution check:** A permitted `→ Resolved` Ticket transition succeeds if every non-cancelled Action is Completed and no non-cancelled Action has outstanding required follow-up. Zero Actions satisfy this gate, preserving existing Lab 3 resolution behavior. For nonterminal Actions the flag may be cleared with appropriate documentation. Completed Actions remain immutable: Staff/Admin records a nonblank outcome through the follow-up satisfaction endpoint, appending a typed history event without changing the Action flag, version or timestamps. A follow-up note alone never satisfies the gate. This check runs on the backend in the same transaction as the Ticket transition. Legacy Tickets with zero Actions may transition to RESOLVED through an authorized, otherwise-valid Lab 3 transition; no new Action is required.
 
@@ -261,7 +261,7 @@ Detailed endpoints, request/response shapes, status codes, and conflicts are in 
 | AC-18 | Recoverable failures preserve entered form values; no secrets or stack traces leak. |
 | AC-19 | Action list has deterministic `actionAt ASC, id ASC` ordering, stable pagination, and bounded page size (default 20, maximum 50; larger requests return 400 INVALID_QUERY). |
 | AC-20 | Action detail shows state, performer, assignment, timestamps and follow-up fields; server-controlled fields are not editable. |
-| AC-21 | An inactive user cannot be selected as assignee, and the API rejects assignment even when called directly. |
+| AC-21 | Inactive IT Staff, Administrators and Requesters cannot be selected as assignees, and the API rejects those assignments even when called directly. |
 | AC-22 | Successful Action or Ticket updates refresh the visible list, status badge and affected dashboard data. |
 | AC-23 | Staff and Requester dashboards use documented date boundaries and stable tie-break sorting, including boundary-time fixtures. |
 | AC-24 | Empty dashboards return zero counts and empty lists, with working and accessible no-data states. |
@@ -273,7 +273,7 @@ Detailed endpoints, request/response shapes, status codes, and conflicts are in 
 | AC-30 | Health/error handling and server-side logging do not expose credentials, SQL or stack traces to clients. |
 | AC-31 | Final demo fixtures include zero/one/multiple Actions and zero/nonzero dashboard states without damaging legacy records. |
 | AC-32 | A migration recovery drill on a disposable database restores pre-migration records, and seed re-runs remain idempotent. |
-| AC-33 | Staff other than Ticket Owner creates and assigns an Action to an active staff member; performer remains authenticated creator; inactive assignee is rejected. |
+| AC-33 | Staff other than Ticket Owner creates and assigns an Action to an active staff member; performer remains authenticated creator; inactive or non-IT-Staff assignee is rejected. |
 | AC-34 | A Completed or Cancelled Action rejects edits/reopening with safe feedback, while retaining its previous values and audit history. |
 | AC-35 | Cancelling a Ticket atomically cancels unfinished Actions but leaves Completed/Cancelled Actions and history intact; rollback on a simulated failure leaves all records unchanged. |
 | AC-36 | A completed Action with `followUpRequired=true` blocks Ticket resolution until Staff/Admin records a nonblank outcome through an append-only follow-up satisfaction history event, preserving the completed Action; requester advisory never resolves the Ticket. |
@@ -315,7 +315,7 @@ The eight design choices below are **approved by the project owner for Issue 1**
 | ID | Approved decision | Verification |
 |---|---|---|
 | D-01 | Actions: `PLANNED → IN_PROGRESS → COMPLETED` or `CANCELLED`; direct `PLANNED → COMPLETED/CANCELLED` permitted; terminal states immutable. | AC-07, AC-34 |
-| D-02 | Any authorized IT Staff/Admin can create an Action and assign it to active IT Staff/Admin, even when someone else owns the Ticket. | AC-02, AC-21, AC-33 |
+| D-02 | Any authorized IT Staff/Admin can create an Action and assign it to active IT Staff (or leave it unassigned), even when someone else owns the Ticket. Administrators cannot be assignees. | AC-02, AC-21, AC-33 |
 | D-03 | Completed/Cancelled Actions cannot be edited, reactivated, or hard-deleted; append-only audit retained. | AC-27, AC-34 |
 | D-04 | Resolve only if all non-cancelled Actions are Completed and no required follow-up remains. | AC-10, AC-36 |
 | D-05 | Ticket cancellation atomically cancels unfinished Actions, preserving existing records and audit. | AC-35 |

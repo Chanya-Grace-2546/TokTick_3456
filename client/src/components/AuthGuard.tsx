@@ -22,7 +22,7 @@ export default function AuthGuard({
 
   if (loading) {
     return (
-      <div className="container py-5 text-center">
+      <div className="container py-5 text-center" role="status" aria-live="polite">
         Loading...
       </div>
     );

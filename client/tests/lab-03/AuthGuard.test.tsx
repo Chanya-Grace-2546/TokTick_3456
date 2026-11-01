@@ -272,3 +272,6 @@ describe("AuthGuard", () => {
     });
   });
 });
+it('Issue 9 announces pending authentication without showing protected content',()=>{
+ vi.restoreAllMocks();vi.spyOn(api,'getMe').mockReturnValue(new Promise(()=>{}));renderGuard();expect(screen.getByRole('status')).toHaveTextContent('Loading');expect(screen.queryByText('Protected Screen')).not.toBeInTheDocument();
+});

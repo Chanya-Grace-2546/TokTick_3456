@@ -26,26 +26,26 @@ describe("Actions Taken list and permissions (AC-05/16/19/20/42)", () => {
     for (const text of ["Working", "Priya Staff", "Check tomorrow", "See Ticket photo", "Planned"]) expect(screen.getByText(text)).toBeInTheDocument();
     expect(screen.getByRole("list", { name: "Actions Taken, oldest first" })).toBeInTheDocument();
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
-    expect(screen.getByRole("article", { name: "Action #31" })).toBeInTheDocument();
+    expect(screen.getByRole("article", { name: "Action 1" })).toBeInTheDocument();
     for (const label of ["ID", "Ticket", "Version", "Performer ID", "Assignee ID"]) expect(screen.queryByText(label, { exact: true })).not.toBeInTheDocument();
     expect(screen.getByText("Created")).toBeInTheDocument(); expect(screen.getByText("Last updated")).toBeInTheDocument(); expect(screen.getAllByText("Alex Staff")).not.toHaveLength(0);
   });
   it("uses readable multiline cards with compact controls and expandable secondary details", async () => {
     vi.mocked(api.fetchActions).mockResolvedValue({ ...page, items: [{ ...action, description: "Checked router\nRestored service" }] });
-    section(); await screen.findByRole("article", { name: "Action #31" });
-    const card = screen.getByRole("article", { name: "Action #31" });
+    section(); await screen.findByRole("article", { name: "Action 1" });
+    const card = screen.getByRole("article", { name: "Action 1" });
     expect(card.querySelector(".action-description")?.textContent).toBe("Checked router\nRestored service");
-    expect(screen.getByRole("button", { name: "Edit Action 31" })).toHaveClass("btn-sm");
+    expect(screen.getByRole("button", { name: "Edit Action 1" })).toHaveClass("btn-sm");
     expect(screen.getByRole("button", { name: "Add Action" })).toHaveClass("btn-sm", "actions-add");
-    const toggle = screen.getByRole("button", { name: "View Details for Action 31" });
+    const toggle = screen.getByRole("button", { name: "View Details for Action 1" });
     expect(toggle).toHaveAttribute("aria-expanded", "false"); fireEvent.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByRole("region", { name: "Action 31 details" })).toBeVisible(); expect(screen.getByText("Attachment Notes")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Action 1 details" })).toBeVisible(); expect(screen.getByText("Attachment Notes")).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "Action pages" })).toBeInTheDocument();
   });
   it("omits empty optional notes while retaining meaningful follow-up notes", async () => {
     vi.mocked(api.fetchActions).mockResolvedValue({ ...page, items: [{ ...action, followUpRequired: false, followUpNote: null, attachmentNotes: null }] });
-    section(); await screen.findByRole("article", { name: "Action #31" });
+    section(); await screen.findByRole("article", { name: "Action 1" });
     expect(screen.getByText("Not required")).toBeInTheDocument();
     expect(screen.queryByText("No follow-up note")).not.toBeInTheDocument();
     expect(screen.queryByText("Attachment Notes")).not.toBeInTheDocument();
@@ -58,12 +58,12 @@ describe("Actions Taken list and permissions (AC-05/16/19/20/42)", () => {
   it("renders requester data read-only without loading staff choices", async () => {
     auth.role = "REQUESTER"; section({ canWrite: false }); await screen.findByText("Checked router");
     expect(screen.queryByRole("button", { name: "Add Action" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Edit Action 31" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit Action 1" })).not.toBeInTheDocument();
     expect(api.fetchStaffOwners).not.toHaveBeenCalled();
   });
   it.each(["COMPLETED", "CANCELLED"] as const)("keeps %s read-only", async state => {
     vi.mocked(api.fetchActions).mockResolvedValue({ ...page, items: [{ ...action, state }] }); section();
-    await screen.findByText("Checked router"); expect(screen.queryByRole("button", { name: "Edit Action 31" })).not.toBeInTheDocument();
+    await screen.findByText("Checked router"); expect(screen.queryByRole("button", { name: "Edit Action 1" })).not.toBeInTheDocument();
   });
   it("supports Admin creation on an empty legacy Ticket", async () => {
     auth.role = "ADMINISTRATOR"; vi.mocked(api.fetchActions).mockResolvedValue({ ...page, items: [], total: 0 }); section();
@@ -145,7 +145,7 @@ describe("Action forms and retry/concurrency (AC-03/06/07/11/17/18/21/39/43)", (
     vi.mocked(api.fetchActions).mockImplementation(async (_ticket, requested) => !moved ? { ...page, total: 21 } :
       { ...page, page: requested ?? 1, total: 21, items: requested === 2 ? [{ ...action, version: 3 }] : [] });
     vi.mocked(api.updateAction).mockImplementation(async () => { moved = true; throw new api.ActionRequestError(409,"STALE_UPDATE"); });
-    section(); fireEvent.click(await screen.findByRole("button", { name: "Edit Action 31" }));
+    section(); fireEvent.click(await screen.findByRole("button", { name: "Edit Action 1" }));
     for (const [label, value] of [["Description (required)","My draft"],["Result","My result"],["Follow-Up Note (required)","My follow-up"],["Attachment Notes","My attachment"]])
       fireEvent.change(screen.getByLabelText(label), { target: { value } });
     const time = (screen.getByLabelText(/Action Date\/Time \(required/) as HTMLInputElement).value;
@@ -180,4 +180,41 @@ describe("Action forms and retry/concurrency (AC-03/06/07/11/17/18/21/39/43)", (
     await waitFor(() => expect(api.updateAction).toHaveBeenCalledWith(42,31,{ assignedToUserId: null, version: 2 }));
   });
 
+});
+
+it("numbers by stable Ticket pagination order rather than database IDs and keeps API IDs", async () => {
+  vi.mocked(api.fetchActions).mockImplementation(async (_ticket, requestedPage = 1) => ({ ...page, page: requestedPage, pageSize: 2, total: 3,
+    items: requestedPage === 1 ? [{ ...action, id: 91 }, { ...action, id: 2, actionAt: "2026-10-23T10:30:00.000Z" }] : [{ ...action, id: 300 }] }));
+  section(); await screen.findByRole("article", { name: "Action 1" });
+  expect(screen.getByRole("article", { name: "Action 2" })).toHaveTextContent("Checked router");
+  fireEvent.click(screen.getByRole("button", { name: "Edit Action 2" })); save();
+  await waitFor(() => expect(api.updateAction).toHaveBeenCalledWith(42, 2, expect.objectContaining({ version: 2 })));
+  await screen.findByRole("button", { name: "Next Actions" });
+  await waitFor(() => expect(screen.queryByRole("button", { name: "Save Action" })).not.toBeInTheDocument());
+  expect(screen.getByRole("article", { name: "Action 1" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Next Actions" }));
+  await screen.findByRole("article", { name: "Action 3" });
+  fireEvent.click(screen.getByRole("button", { name: "Previous Actions" }));
+  await screen.findByRole("article", { name: "Action 1" });
+  expect(screen.getByRole("article", { name: "Action 2" })).toBeInTheDocument();
+});
+
+it("offers only Staff and Unassigned from a broader Ticket owner list", () => {
+  render(<ActionTakenForm ticketId={42} owners={[...owners, { id: 20, name: "Admin account", email: "admin@example.test", role: "ADMINISTRATOR" }, { id: 21, name: "Requester account", email: "requester@example.test", role: "REQUESTER" } as unknown as api.StaffOwner, { ...owners[0], id: 22, name: "Inactive Staff", isActive: false } as api.StaffOwner]} performer={staff.name} onCancel={vi.fn()} onSuccess={vi.fn()} onFailure={vi.fn()} onReload={vi.fn()} refreshOwners={vi.fn()} />);
+  expect(screen.getByRole("option", { name: "Unassigned" })).toBeInTheDocument();
+  expect(screen.getByRole("option", { name: "Priya Staff (IT Staff)" })).toBeInTheDocument();
+  expect(screen.queryByRole("option", { name: /Admin account|Requester account|Inactive Staff/ })).not.toBeInTheDocument();
+});
+it("retains rejected assignment draft and displays the backend field message", async () => {
+  vi.mocked(api.updateAction).mockRejectedValue(new api.ActionRequestError(422, "VALIDATION_ERROR", { assignedToUserId: "Choose an active IT Staff member or Unassigned." }));
+  form(); fireEvent.change(screen.getByLabelText("Description (required)"), { target: { value: "Retained work" } }); save();
+  await screen.findByText("Choose an active IT Staff member or Unassigned.");
+  expect(screen.getByLabelText("Description (required)")).toHaveValue("Retained work");
+  expect(screen.getByLabelText("Assigned To")).toHaveValue("8");
+});
+it("preserves legacy Admin display but requires eligible selection before editing", async () => {
+  vi.mocked(api.fetchActions).mockResolvedValue({ ...page, items: [{ ...action, assignedTo: { id: 20, name: "Legacy Administrator" } }] }); section();
+  await screen.findByText("Legacy Administrator"); fireEvent.click(screen.getByRole("button", { name: "Edit Action 1" }));
+  expect(screen.getByRole("option", { name: "Legacy Administrator (no longer eligible)" })).toBeDisabled();
+  save(); expect(api.updateAction).not.toHaveBeenCalled(); expect(screen.getByLabelText("Description (required)")).toHaveValue(action.description);
 });

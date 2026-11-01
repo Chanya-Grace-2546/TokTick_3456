@@ -1,3 +1,4 @@
+vi.mock("../../src/components/TicketStatusHistory.js", () => ({ default: () => null }));
 // Actions integration has dedicated Lab 4 coverage; preserve legacy assertions.
 vi.mock("../../src/components/ActionsTaken.js", () => ({ default: () => null }));
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -21,6 +22,7 @@ vi.mock("../../src/api.js", async () => {
     ...actual,
     fetchStaffTicketDetail: vi.fn(),
     fetchStaffOwners: vi.fn(),
+    fetchActionAssignees: vi.fn().mockResolvedValue([]),
     claimStaffTicket: vi.fn(),
     updateStaffTicketOwner: vi.fn(),
     updateStaffTicketPriority: vi.fn(),

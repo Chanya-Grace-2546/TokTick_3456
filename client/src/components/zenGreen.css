@@ -1,0 +1,130 @@
+.zen-app :is(a, button, input, select, textarea):focus-visible {
+  outline: 3px solid var(--zen-primary);
+  outline-offset: 3px;
+}
+.zen-app > .app-header :is(a, button):focus-visible {
+  outline-color: white;
+}
+.zen-app > .app-header .account-panel :is(a, button):focus-visible {
+  outline-color: var(--zen-primary);
+  outline-offset: -3px;
+}
+.zen-app .ticket-sort-button {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+.zen-app .ticket-sort-button:focus-visible {
+  outline-color: white;
+  outline-offset: 2px;
+}
+.zen-app .action-form .btn-success {
+  --bs-btn-bg: var(--zen-primary);
+  --bs-btn-border-color: var(--zen-primary);
+  --bs-btn-hover-bg: var(--zen-secondary);
+  --bs-btn-hover-border-color: var(--zen-secondary);
+  --bs-btn-active-bg: var(--zen-primary);
+  --bs-btn-active-border-color: var(--zen-primary);
+  --bs-btn-disabled-bg: var(--zen-primary);
+  --bs-btn-disabled-border-color: var(--zen-primary);
+}
+.zen-app .action-form :is(.btn-outline-primary, .btn-outline-success) {
+  --bs-btn-color: var(--zen-primary);
+  --bs-btn-border-color: var(--zen-primary);
+  --bs-btn-hover-color: white;
+  --bs-btn-hover-bg: var(--zen-primary);
+  --bs-btn-hover-border-color: var(--zen-primary);
+  --bs-btn-active-color: white;
+  --bs-btn-active-bg: var(--zen-primary);
+  --bs-btn-active-border-color: var(--zen-primary);
+  --bs-btn-disabled-color: var(--zen-primary);
+  --bs-btn-disabled-border-color: var(--zen-primary);
+}
+
+/* Share available desktop width without imposing an oversized table minimum. */
+.zen-app .requester-ticket-scroll { overflow-x: auto; }
+.zen-app .requester-ticket-scroll:focus-visible {
+  outline: 3px solid var(--zen-primary);
+  outline-offset: 3px;
+}
+.zen-app .requester-ticket-table {
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+.zen-app .requester-ticket-table :is(th, td):nth-child(1) { width: 16%; white-space: nowrap; }
+.zen-app .requester-ticket-table :is(th, td):nth-child(2) { width: 25%; white-space: normal; overflow-wrap: break-word; }
+.zen-app .requester-ticket-table :is(th, td):nth-child(3) { width: 11%; }
+.zen-app .requester-ticket-table :is(th, td):nth-child(4) { width: 8%; white-space: nowrap; }
+.zen-app .requester-ticket-table :is(th, td):nth-child(5) { width: 16%; }
+.zen-app .requester-ticket-table :is(th, td):nth-child(n+6) { width: 12%; white-space: nowrap; }
+.zen-app .requester-ticket-table th { white-space: nowrap; }
+.zen-app .requester-ticket-table .ticket-sort-button { white-space: nowrap; }
+
+
+.zen-app .requester-ticket-table a { color: var(--zen-primary); }
+
+.zen-app .account-panel {
+  width: 22rem;
+  max-width: calc(100vw - 2rem);
+  overflow-wrap: anywhere;
+}
+.zen-app .action-form .btn:focus-visible {
+  box-shadow: 0 0 0 .25rem color-mix(in srgb, var(--zen-primary) 25%, transparent);
+}
+
+.zen-app .mobile-nav-panel { overflow-wrap: anywhere; }
+
+/* Green identifies existing interactions; semantic badges and static copy retain their colors. */
+.zen-app main a:not(.btn):not(.dashboard-kpi):not(.dashboard-ticket):not(.text-reset):not(.dashboard-bars a) {
+  color: var(--zen-primary);
+  text-decoration: underline;
+  text-underline-offset: .2em;
+  text-decoration-thickness: 1px;
+}
+.zen-app main a:not(.btn):not(.dashboard-kpi):not(.dashboard-ticket):not(.text-reset):not(.dashboard-bars a):hover {
+  text-decoration: underline;
+  text-underline-offset: .2em;
+  text-decoration-thickness: 2px;
+}
+.zen-app .staff-dashboard .dashboard-kpi {
+  border-color: color-mix(in srgb, var(--zen-primary) 45%, white);
+}
+.zen-app .dashboard-kpi-arrow, .zen-app .dashboard-ticket-arrow { color: var(--zen-primary); }
+.zen-app .dashboard-kpi strong { color: var(--zen-text); }
+.zen-app .dashboard-kpi-urgent strong { color: var(--dashboard-error); }
+.zen-app .dashboard-bars a {
+  border-inline-start: 3px solid color-mix(in srgb, var(--zen-primary) 45%, white);
+  padding-inline-start: .6rem;
+}
+.zen-app .dashboard-bars a:hover, .zen-app .dashboard-bars a:focus-visible,
+.zen-app .dashboard-ticket:focus-visible { background: var(--zen-pale); }
+.zen-app .dashboard-bars .dashboard-bar-label > span { color: var(--zen-primary); }
+.zen-app .dashboard-bars .dashboard-bar-label strong { color: var(--zen-text); }
+.zen-app .dashboard-bars a { text-decoration: none; }
+.zen-app .dashboard-ticket-number { text-decoration: underline; text-underline-offset: .2em; }
+.zen-app .requester-ticket-table tbody tr:hover > td { --bs-table-bg: var(--zen-pale); }
+.zen-app [role="link"][aria-label^="Open ticket"] { border-color: var(--zen-secondary); }
+.zen-app [role="link"][aria-label^="Open ticket"] > td:first-child,
+.zen-app [role="link"][aria-label^="Open ticket"] .fw-semibold {
+  color: var(--zen-primary); text-decoration: underline; text-underline-offset: .2em;
+}
+.zen-app [role="link"][aria-label^="Open ticket"]:hover > td,
+.zen-app [role="link"][aria-label^="Open ticket"]:focus-visible > td { --bs-table-bg: var(--zen-pale); }
+.zen-app .action-details-toggle { text-decoration: underline; text-underline-offset: .2em; font-weight: 600; }
+.zen-app .action-details-toggle:hover { text-decoration-thickness: 2px; }
+.zen-app .action-card-heading h3, .zen-app .action-meta dt,
+.zen-app .action-secondary dt, .zen-app .action-outcomes h4 { color: var(--zen-text); }
+
+.zen-app .ticket-link-label { color: var(--zen-primary); text-decoration: underline; text-underline-offset: .2em; }
+.zen-app a.text-reset:hover .ticket-link-label { text-decoration-thickness: 2px; }
+
+.zen-app .dashboard-ticket:hover .dashboard-ticket-number,
+.zen-app .dashboard-kpi:hover .dashboard-kpi-label { text-decoration: underline; text-underline-offset: .2em; }
