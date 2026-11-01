@@ -1,0 +1,13 @@
+a.ticket-back-link {
+  text-decoration: none;
+}
+
+a.ticket-back-link:hover {
+  text-decoration: underline;
+}
+
+a.ticket-back-link:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+  text-decoration: underline;
+}

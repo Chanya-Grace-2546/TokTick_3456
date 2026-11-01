@@ -159,6 +159,8 @@ describe("Lab 3 Issue 6 — Staff Ticket Detail & Operations", () => {
       },
     });
 
+    await prisma.ticketStatusHistory.deleteMany({ where: { actorUserId: { in: testUserIds } } });
+
     if (fixtureTicketId) await prisma.ticket.delete({ where: { id: fixtureTicketId } });
 
     await prisma.user.deleteMany({

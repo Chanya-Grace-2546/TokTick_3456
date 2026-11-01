@@ -217,6 +217,8 @@ export interface TicketListResponse {
 }
 
 export interface TicketListParams {
+  status?: StaffTicketStatus;
+  statusGroup?: "open";
   search?: string;
   category?: number;
   requestedPriority?: Priority;
@@ -236,6 +238,8 @@ export type StaffTicketStatus = "NEW" | "OPEN" | "IN_PROGRESS" | "WAITING_FOR_RE
 export type StaffQueueSort = "ticketNumber" | "createdAt" | "updatedAt" | "requestedPriority" | "itPriority" | "status";
 
 export interface StaffQueueParams {
+  statusGroup?: "open";
+  myAction?: true;
   search?: string;
   category?: number;
   requestedPriority?: Priority;
@@ -300,6 +304,10 @@ export async function fetchStaffTickets(params: StaffQueueParams): Promise<Staff
   return readStaffResponse(await fetch(`${API_URL}/api/staff/tickets${suffix}`, { credentials: "include" }));
 }
 
+export async function fetchActionAssignees(): Promise<StaffOwner[]> {
+  return readStaffResponse(await fetch(`${API_URL}/api/staff/action-assignees`, { credentials: "include" }));
+}
+
 export async function fetchStaffOwners(): Promise<StaffOwner[]> {
   return readStaffResponse(await fetch(`${API_URL}/api/staff/owners`, { credentials: "include" }));
 }
@@ -340,9 +348,7 @@ export async function fetchTickets(
         error: "LOAD_TICKETS_FAILED",
       }));
 
-    throw new Error(
-      body.error ?? "Failed to load tickets"
-    );
+    throw new RequesterApiError(res.status, body.error ?? "LOAD_TICKETS_FAILED", body.fields ?? {});
   }
 
   return res.json();
@@ -923,7 +929,8 @@ export async function updateStaffTicketPriority(
 
 export async function updateStaffTicketStatus(
   ticketId: number,
-  status: StaffTicketStatus
+  status: StaffTicketStatus,
+  expectedStatus?: StaffTicketStatus
 ): Promise<{
   id: number;
   status: StaffTicketStatus;
@@ -940,6 +947,7 @@ export async function updateStaffTicketStatus(
         },
         body: JSON.stringify({
           status,
+          ...(expectedStatus === undefined ? {} : { expectedStatus }),
         }),
       }
     )
@@ -978,4 +986,80 @@ export async function createInternalNote(
       }
     )
   );
+}
+
+// Lab 4 — Actions Taken. Server controls performer, timestamps and version.
+export type ActionState = "PLANNED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
+export interface FollowUpResolution { outcome: string; actor: { id: number; name: string }; occurredAt: string }
+export interface ActionTaken {
+  id: number; ticketId: number; actionAt: string; description: string; result: string | null;
+  performedBy: { id: number; name: string }; assignedTo: { id: number; name: string } | null;
+  followUpRequired: boolean; followUpNote: string | null; attachmentNotes: string | null;
+  state: ActionState; version: number; createdAt: string; updatedAt: string;
+  followUpResolution?: FollowUpResolution | null;
+}
+export interface ActionInput {
+  actionAt: string; description: string; result: string | null; assignedToUserId: number | null;
+  followUpRequired: boolean; followUpNote: string | null; attachmentNotes: string | null; state: ActionState;
+}
+export interface ActionPage { items: ActionTaken[]; page: number; pageSize: number; total: number }
+export class ActionRequestError extends Error {
+  constructor(public status: number, public code: string, public fields: FieldErrors = {}) { super(code); }
+}
+async function actionRequest<T>(path: string, method = "GET", body?: unknown, key?: string): Promise<T> {
+  const res = await fetch(`${API_URL}/api/tickets/${path}`, {
+    method, credentials: "include",
+    ...(body === undefined ? {} : { headers: { "Content-Type": "application/json", ...(key ? { "Idempotency-Key": key } : {}) }, body: JSON.stringify(body) }),
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    throw new ActionRequestError(res.status, error.error ?? "ACTION_REQUEST_FAILED", error.fields ?? {});
+  }
+  return res.json();
+}
+export function fetchActions(ticketId: number, page = 1): Promise<ActionPage> {
+  return actionRequest(`${ticketId}/actions?page=${page}&pageSize=20`);
+}
+export function createAction(ticketId: number, body: ActionInput, key: string): Promise<{ action: ActionTaken }> {
+  return actionRequest(`${ticketId}/actions`, "POST", body, key);
+}
+export function updateAction(ticketId: number, actionId: number, body: Partial<ActionInput> & { version: number }): Promise<{ action: ActionTaken }> {
+  return actionRequest(`${ticketId}/actions/${actionId}`, "PATCH", body);
+}
+
+export function recordFollowUpResolution(ticketId: number, actionId: number, body: { version: number; outcome: string }): Promise<{ followUpResolution: FollowUpResolution }> {
+  return actionRequest(`${ticketId}/actions/${actionId}/follow-up-resolution`, "POST", body);
+}
+
+export interface StaffDashboardData {
+  asOf: string;
+  metrics: { unassignedTickets: number; myOwnedTickets: number; ticketsWithMyActions: number; urgentOpenTickets: number };
+  byStatus: Record<StaffTicketStatus, number>;
+  byPriority: { priority: Priority; count: number }[];
+  recentTickets: { id: number; ticketNumber: string; summary: string; status: StaffTicketStatus; updatedAt: string; href: string }[];
+  drillDown: Record<keyof StaffDashboardData["metrics"], string>;
+}
+export async function fetchStaffDashboard(): Promise<StaffDashboardData> {
+  return readStaffResponse(await fetch(`${API_URL}/api/dashboard/staff`, { credentials: "include" }));
+}
+
+export class RequesterApiError extends Error {
+  constructor(public status:number, public code:string, public fields:FieldErrors={}) { super(code); }
+}
+export interface RequesterDashboardData {
+  asOf:string; recentWindowDays:7;
+  metrics:{openTickets:number;waitingForRequester:number};
+  recentlyUpdated:{id:number;ticketNumber:string;summary:string;status:StaffTicketStatus;updatedAt:string;href:string}[];
+  recentlyResolved:RequesterDashboardData["recentlyUpdated"];
+  drillDown:{openTickets:string;waitingForRequester:string};
+}
+export async function fetchRequesterDashboard():Promise<RequesterDashboardData> {
+  const res=await fetch(`${API_URL}/api/dashboard/requester`,{credentials:"include"});
+  if(!res.ok){const body=await res.json().catch(()=>({}));throw new RequesterApiError(res.status,body.error??"LOAD_DASHBOARD_FAILED",body.fields??{});}
+  return res.json();
+}
+
+export interface TicketStatusEvent { id: number; oldStatus: string; newStatus: string; actor: { name: string; role: string }; occurredAt: string }
+export function fetchTicketStatusHistory(ticketId: number): Promise<{ items: TicketStatusEvent[] }> {
+  return actionRequest(`${ticketId}/status-history`);
 }

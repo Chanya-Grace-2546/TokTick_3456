@@ -1,5 +1,10 @@
+import "./zenGreen.css";
 import {
   ReactNode,
+  type CSSProperties,
+  useEffect,
+  useId,
+  useRef,
   useState,
 } from "react";
 import {
@@ -34,6 +39,11 @@ export default function AppShell({
     setMobileNavOpen,
   ] = useState(false);
 
+  const accountTrigger = useRef<HTMLButtonElement>(null);
+  const mobileTrigger = useRef<HTMLButtonElement>(null);
+  const accountId = useId(), mobileId = useId();
+  useEffect(() => { setMenuOpen(false); setMobileNavOpen(false); }, [location.pathname]);
+
   const isActive = (
     path: string
   ) =>
@@ -61,13 +71,24 @@ export default function AppShell({
 
   return (
     <div
+      className="zen-app"
       style={{
+        "--zen-primary": zenGreen.primary,
+        "--zen-secondary": zenGreen.secondary,
+        "--zen-pale": zenGreen.pale,
+        "--zen-text": zenGreen.text,
         minHeight: "100vh",
         backgroundColor:
           zenGreen.background,
-      }}
+      } as CSSProperties}
     >
       <header
+        className="app-header"
+        onKeyDown={event => {
+          if (event.key !== "Escape") return;
+          if (menuOpen) { event.preventDefault(); setMenuOpen(false); accountTrigger.current?.focus(); }
+          if (mobileNavOpen) { event.preventDefault(); setMobileNavOpen(false); mobileTrigger.current?.focus(); }
+        }}
         style={{
           backgroundColor:
             zenGreen.primary,
@@ -75,11 +96,11 @@ export default function AppShell({
       >
         <div
           className="container d-flex align-items-center justify-content-between"
-          style={{ height: 56 }}
+          style={{ height: 56, gap: 12 }}
         >
           <Link
             to="/"
-            className="d-flex align-items-center gap-2 text-white text-decoration-none fw-bold"
+            className="d-flex align-items-center gap-2 text-white text-decoration-none fw-bold flex-shrink-0"
           >
             <svg
               width="20"
@@ -107,7 +128,8 @@ export default function AppShell({
             TokTickIT
           </Link>
 
-          <nav className="d-none d-md-flex align-items-center gap-3">
+          <nav className="d-none d-md-flex align-items-center gap-2 flex-shrink-0">
+            {(showAdminNav || showStaffNav) && <Link to="/staff/dashboard" className="text-white text-decoration-none px-2 py-1 rounded" aria-current={isActive("/staff/dashboard") ? "page" : undefined} style={{ backgroundColor: isActive("/staff/dashboard") ? zenGreen.secondary : "transparent", fontWeight: 600 }}>Dashboard</Link>}
             {showAdminNav && <Link to="/admin/users" className="text-white text-decoration-none px-2 py-1 rounded" aria-current={isActive("/admin/users") ? "page" : undefined} style={{ backgroundColor: isActive("/admin/users") ? zenGreen.secondary : "transparent", fontWeight: 600 }}>Admin / Users</Link>}
             {showStaffNav && (
               <Link to="/staff/tickets" className="text-white text-decoration-none px-2 py-1 rounded" aria-current={isActive("/staff/tickets") ? "page" : undefined} style={{ backgroundColor: isActive("/staff/tickets") ? zenGreen.secondary : "transparent", fontWeight: 600 }}>
@@ -116,6 +138,7 @@ export default function AppShell({
             )}
             {showRequesterNav && (
               <>
+                <Link to="/dashboard" className="text-white text-decoration-none px-2 py-1 rounded" aria-current={isActive("/dashboard") ? "page" : undefined} style={{backgroundColor:isActive("/dashboard")?zenGreen.secondary:"transparent"}}>Dashboard</Link>
                 <Link
                   to="/tickets"
                   className="text-decoration-none px-2 py-1 rounded"
@@ -159,7 +182,8 @@ export default function AppShell({
             )}
           </nav>
 
-          <div className="d-none d-md-block position-relative">
+          <div className="d-none d-md-block position-relative"
+            style={{ minWidth: 0, maxWidth: 220 }}>
             {user ? (
               <>
                 <button
@@ -169,6 +193,10 @@ export default function AppShell({
                     backgroundColor:
                       zenGreen.secondary,
                     color: "white",
+                    maxWidth: "100%",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
                   }}
                   onClick={() =>
                     setMenuOpen(
@@ -176,6 +204,9 @@ export default function AppShell({
                         !value
                     )
                   }
+                  ref={accountTrigger}
+                  aria-controls={accountId}
+                  title={user.name}
                   aria-expanded={
                     menuOpen
                   }
@@ -185,7 +216,8 @@ export default function AppShell({
 
                 {menuOpen && (
                   <div
-                    className="position-absolute end-0 mt-1 bg-white shadow rounded"
+                    id={accountId}
+                    className="position-absolute end-0 mt-1 bg-white shadow rounded account-panel"
                     style={{
                       minWidth: 220,
                       zIndex: 10,
@@ -253,6 +285,8 @@ export default function AppShell({
             aria-expanded={
               mobileNavOpen
             }
+            ref={mobileTrigger}
+            aria-controls={mobileId}
             aria-label="Toggle navigation"
           >
             ☰
@@ -261,7 +295,8 @@ export default function AppShell({
 
         {mobileNavOpen && (
           <div
-            className="d-md-none px-3 pb-3"
+            id={mobileId}
+            className="d-md-none px-3 pb-3 mobile-nav-panel"
             style={{
               backgroundColor:
                 zenGreen.primary,
@@ -269,6 +304,7 @@ export default function AppShell({
           >
             {user ? (
               <div className="d-flex flex-column gap-2">
+                {(showAdminNav || showStaffNav) && <Link to="/staff/dashboard" className="text-white text-decoration-none" aria-current={isActive("/staff/dashboard") ? "page" : undefined} onClick={() => setMobileNavOpen(false)}>Dashboard</Link>}
                 {showAdminNav && <Link to="/admin/users" className="text-white text-decoration-none" aria-current={isActive("/admin/users") ? "page" : undefined} onClick={() => setMobileNavOpen(false)}>Admin / Users</Link>}
                 {showStaffNav && (
                   <Link to="/staff/tickets" className="text-white text-decoration-none" aria-current={isActive("/staff/tickets") ? "page" : undefined} onClick={() => setMobileNavOpen(false)}>
@@ -277,6 +313,7 @@ export default function AppShell({
                 )}
                 {showRequesterNav && (
                   <>
+                    <Link to="/dashboard" className="text-white text-decoration-none" aria-current={isActive("/dashboard") ? "page" : undefined} onClick={()=>setMobileNavOpen(false)}>Dashboard</Link>
                     <Link
                       to="/tickets"
                       className="text-white text-decoration-none"

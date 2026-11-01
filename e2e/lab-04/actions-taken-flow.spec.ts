@@ -1,0 +1,68 @@
+import {test,expect} from '../fixtures';
+import {createTicket,asStaff,actions,login,logout,USERS,postAction,apiOrigin,clientOrigin,captureScreen} from './helpers';
+import {startProcess,stopProcess} from '../processes';
+test('E2E-01: create, assign, edit and complete work; owned Requester reads safely',async({page},info)=>{
+ const ticket=await createTicket(page);await asStaff(page,ticket.id);
+ await page.getByRole('button',{name:'Add Action',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'New Action',exact:true})).toBeFocused();
+ await captureScreen(page,info,'actions-taken','create-form');
+ await page.getByRole('button',{name:'Save Action',exact:true}).click();
+ await expect(page.getByRole('alert')).toContainText('Review');
+ await expect(page.getByLabel('Description (required)',{exact:true})).toHaveAttribute('aria-invalid','true');
+ await captureScreen(page,info,'actions-taken','validation-errors');
+ await page.getByRole('button',{name:'Cancel',exact:true}).click();await page.getByRole('button',{name:'Add Action',exact:true}).click();
+ const choices=page.getByLabel('Assigned To',{exact:true});
+ const eligible=await page.request.get(`${apiOrigin()}/api/staff/action-assignees`);expect(eligible.status()).toBe(200);
+ expect((await eligible.json()).every((person:any)=>person.role==='IT_STAFF')).toBe(true);
+ const options=await choices.locator('option').allTextContents();expect(options).toContain('Unassigned');
+ expect(options.every(text=>text==='Unassigned'||text.endsWith('(IT Staff)'))).toBe(true);
+ await page.getByLabel('Description (required)',{exact:true}).fill('Investigated network\nConnection restored.');
+ await page.getByLabel('Assigned To',{exact:true}).selectOption({label:`${USERS.staff.name} (IT Staff)`});
+ await expect(choices).toHaveValue(String((await eligible.json()).find((person:any)=>person.name===USERS.staff.name).id));
+ await captureScreen(page,info,'actions-taken','assignment-selection');
+ await page.getByRole('button',{name:'Save Action',exact:true}).click();await expect(page.getByText('Action saved.',{exact:true})).toBeVisible();
+ const action=(await actions(page,ticket.id)).items[0];expect(action.performedBy.name).toBe(USERS.staff.name);expect(action.assignedTo.name).toBe(USERS.staff.name);
+ await expect(page.getByRole('article',{name:'Action 1',exact:true})).toContainText(USERS.staff.name);
+ await captureScreen(page,info,'actions-taken','saved-assignment');
+ expect((await postAction(page,ticket.id,{description:'Documented additional inspection'})).status()).toBe(201);
+ await page.reload();await expect(page.getByRole('article')).toHaveCount(2);
+ await captureScreen(page,info,'actions-taken','multiple-actions');
+ await page.getByRole('button',{name:'Edit Action 1',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Edit Action',exact:true})).toBeFocused();
+ await page.getByLabel('State',{exact:true}).selectOption('IN_PROGRESS');
+ await captureScreen(page,info,'actions-taken','edit-in-progress');
+ await page.getByRole('button',{name:'Save Action',exact:true}).click();
+ await expect(page.getByRole('article',{name:'Action 1',exact:true})).toContainText('In Progress');
+ await captureScreen(page,info,'actions-taken','in-progress');
+ await page.getByRole('button',{name:'Edit Action 1',exact:true}).click();await page.getByLabel('State',{exact:true}).selectOption('COMPLETED');await page.getByLabel('Result (required)',{exact:true}).fill('Validated successful connection');await page.getByRole('button',{name:'Save Action',exact:true}).click();
+ await expect(page.getByRole('article',{name:'Action 1'})).toContainText('Completed');await expect(page.getByRole('button',{name:'Edit Action 1',exact:true})).toHaveCount(0);
+ await captureScreen(page,info,'actions-taken','completed');
+ await page.getByRole('button',{name:'Edit Action 2',exact:true}).click();await page.getByLabel('State',{exact:true}).selectOption('CANCELLED');await page.getByRole('button',{name:'Save Action',exact:true}).click();
+ await expect(page.getByRole('article',{name:'Action 2',exact:true})).toContainText('Cancelled');
+ await expect(page.getByRole('button',{name:'Edit Action 2',exact:true})).toHaveCount(0);
+ await captureScreen(page,info,'actions-taken','cancelled');
+ await logout(page);await login(page,USERS.requester.email);await expect(page).toHaveURL(/\/dashboard$/);await page.goto(`/tickets/${ticket.id}`);await expect(page.getByText('Validated successful connection',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Add Action',exact:true})).toHaveCount(0);await expect(page.getByRole('heading',{name:/Internal Notes/})).toHaveCount(0);
+ await expect(page.getByRole('button',{name:/^Edit Action /})).toHaveCount(0);
+ await captureScreen(page,info,'actions-taken','requester-read-only');
+ await logout(page);await login(page,USERS.otherRequester.email);await expect(page).toHaveURL(/\/dashboard$/);const response=await page.request.get(`${apiOrigin()}/api/tickets/${ticket.id}/actions`);expect(response.status()).toBe(404);
+});
+test('E2E-01/17: a committed POST with lost response retries the identical body/key once',async({page},info)=>{
+ const ticket=await createTicket(page);await asStaff(page,ticket.id);const attempts:{key:string;body:string}[]=[];
+ await page.route('**/api/tickets/*/actions',async route=>{if(route.request().method()!=='POST')return route.continue();attempts.push({key:route.request().headers()['idempotency-key'],body:route.request().postData()!});if(attempts.length===1){const response=await route.fetch();expect(response.status()).toBe(201);await route.abort('failed');}else await route.continue();});
+ await page.getByRole('button',{name:'Add Action',exact:true}).click();await page.getByLabel('Description (required)',{exact:true}).fill('Ambiguous persisted create');await page.getByRole('button',{name:'Save Action',exact:true}).click();await expect(page.getByRole('button',{name:'Retry original request',exact:true})).toBeVisible();await expect(page.getByLabel('Description (required)',{exact:true})).toHaveValue('Ambiguous persisted create');await captureScreen(page,info,'actions-taken','injected-response-loss');await page.getByRole('button',{name:'Retry original request',exact:true}).click();await expect(page.getByText('Action saved.',{exact:true})).toBeVisible();expect(attempts).toHaveLength(2);expect(attempts[1]).toEqual(attempts[0]);expect((await actions(page,ticket.id)).items).toHaveLength(1);
+});
+test('AC-43: saved response and history survive an actual owned backend restart',async({page})=>{
+ const ticket=await createTicket(page);await asStaff(page,ticket.id);const key=crypto.randomUUID(),body={description:'Restart durable creation'};
+ const {PrismaClient}=await import('../../server/node_modules/@prisma/client/index.js');const {verifyE2ETarget}=await import('../../server/tests/helpers/e2eSafety.mjs');const prisma=new PrismaClient();
+ let backend:Awaited<ReturnType<typeof startProcess>>|undefined;
+ try {
+  await verifyE2ETarget(prisma);
+  backend=await startProcess('backend',process.env);
+  const first=await page.request.post(`${backend.origin}/api/tickets/${ticket.id}/actions`,{headers:{Origin:clientOrigin(),'Idempotency-Key':key},data:body});expect(first.status()).toBe(201);const saved=await first.json();
+  const history=await prisma.actionTakenHistory.findMany({where:{actionId:saved.action.id},orderBy:{id:'asc'}});expect(history).toHaveLength(1);
+  await stopProcess(backend.child);backend=await startProcess('backend',process.env);
+  const replay=await page.request.post(`${backend.origin}/api/tickets/${ticket.id}/actions`,{headers:{Origin:clientOrigin(),'Idempotency-Key':key},data:body});expect(replay.status()).toBe(201);expect(await replay.json()).toEqual(saved);
+  const conflict=await page.request.post(`${backend.origin}/api/tickets/${ticket.id}/actions`,{headers:{Origin:clientOrigin(),'Idempotency-Key':key},data:{description:'Different'}});expect(conflict.status()).toBe(409);
+  expect(await prisma.actionTakenHistory.findMany({where:{actionId:saved.action.id},orderBy:{id:'asc'}})).toEqual(history);expect(await prisma.actionTaken.count({where:{ticketId:ticket.id}})).toBe(1);
+ } finally {if(backend)await stopProcess(backend.child);await prisma.$disconnect();}
+});

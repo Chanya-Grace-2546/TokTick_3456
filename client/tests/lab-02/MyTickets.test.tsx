@@ -1,3 +1,4 @@
+vi.mock("../../src/context/AuthContext.js",()=>({useAuth:()=>({refreshUser:vi.fn().mockResolvedValue(undefined)})}));
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   render,
@@ -60,6 +61,11 @@ describe("TicketsPlaceholder (My Tickets)", () => {
 
     const table = await screen.findByRole("table");
     expect(table.parentElement).toHaveClass("table-responsive", "d-none", "d-lg-block");
+    expect(table.parentElement).toHaveAttribute("role", "region");
+    expect(table.parentElement).toHaveAccessibleName("My Tickets table");
+    expect(table.parentElement).toHaveAttribute("tabindex", "0");
+    expect(within(table).getByText("Waiting for Requester")).toBeInTheDocument();
+    expect(within(table).queryByText("WAITING_FOR_REQUESTER")).not.toBeInTheDocument();
     const cards = screen.getByRole("list", { name: "My Tickets cards" });
     expect(cards).toHaveClass("d-lg-none");
     expect(within(cards).getAllByRole("listitem")).toHaveLength(1);
@@ -67,7 +73,7 @@ describe("TicketsPlaceholder (My Tickets)", () => {
     expect(card).toHaveAttribute("href", "/tickets/12");
     for (const text of [
       cardTicket.ticketNumber, cardTicket.summary, cardTicket.category,
-      cardTicket.requestedPriority, cardTicket.currentStatus,
+      cardTicket.requestedPriority, "Waiting for Requester",
       new Date(cardTicket.createdAt).toLocaleDateString(),
       new Date(cardTicket.updatedAt).toLocaleDateString(),
     ]) {
@@ -362,8 +368,7 @@ describe("TicketsPlaceholder (My Tickets)", () => {
       within(screen.getByRole("table")).getByText("TKT-2026-000001")
     );
 
-    // The sortable column headers use role="button" (for clickability),
-    // not the default columnheader role — scoped to the table since the
+    // Native sorting buttons preserve semantic column headers — scoped to the table since the
     // "Sort" dropdown button's label also contains "Created Date".
     const table = screen.getByRole("table");
 
@@ -505,7 +510,7 @@ describe("TicketsPlaceholder (My Tickets)", () => {
     );
 
     fireEvent.click(
-      screen.getByRole("menuitem", {
+      within(screen.getByRole("group", {name:"Ticket sorting"})).getByRole("button", {
         name: /^ticket no\./i,
       })
     );
@@ -524,4 +529,19 @@ describe("TicketsPlaceholder (My Tickets)", () => {
       })
     ).toBeInTheDocument();
   });
+});
+
+describe('Issue 9 Ticket table keyboard accessibility',()=>{
+ beforeEach(()=>{vi.restoreAllMocks();vi.spyOn(api,'fetchTickets').mockResolvedValue({items:[{id:42,ticketNumber:'TKT-42',summary:'Readable summary',category:'Hardware',requestedPriority:'MEDIUM',itPriority:'MEDIUM',currentStatus:'OPEN',createdAt:'2026-10-28T00:00:00Z',updatedAt:'2026-10-28T00:00:00Z'}],page:1,pageSize:10,totalItems:1,totalPages:1,noResults:false});});
+ it('retains semantic headers, sorts with Enter, and restores focus after refresh',async()=>{
+  renderScreen();const table=await screen.findByRole('table');const header=within(table).getByRole('columnheader',{name:/Created Date/});expect(header).toHaveAttribute('aria-sort','descending');const button=within(header).getByRole('button');button.focus();await userEvent.setup().keyboard('{Enter}');
+  await waitFor(()=>expect(within(screen.getByRole('table')).getByRole('columnheader',{name:/Created Date/})).toHaveAttribute('aria-sort','ascending'));
+  expect(within(screen.getByRole('table')).getByRole('button',{name:/Created Date/})).toHaveFocus();
+  expect(api.fetchTickets).toHaveBeenLastCalledWith(expect.objectContaining({sortBy:'createdAt',sortDir:'asc'}));
+ });
+ it('uses a native desktop Ticket link and accessible sorting disclosure',async()=>{
+  renderScreen();const table=await screen.findByRole('table');expect(within(table).getByRole('link',{name:'Open ticket TKT-42'})).toHaveAttribute('href','/tickets/42');
+  const toggle=screen.getByRole('button',{name:/Sort:/});fireEvent.click(toggle);const group=screen.getByRole('group',{name:'Ticket sorting'});expect(group.id).toBe(toggle.getAttribute('aria-controls'));within(group).getByRole('button',{name:/Ticket No/}).focus();await userEvent.setup().keyboard('{Escape}');expect(toggle).toHaveFocus();expect(toggle).toHaveAttribute('aria-expanded','false');
+ });
+ it('uses a readable warning tint for MEDIUM on both layouts',async()=>{renderScreen();await screen.findByRole('table');for(const badge of screen.getAllByText('MEDIUM'))expect(badge).toHaveStyle({backgroundColor:'#FFF4D6',color:'#1F2E27'});});
 });

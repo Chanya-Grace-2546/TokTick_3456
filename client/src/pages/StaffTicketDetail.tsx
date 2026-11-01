@@ -1,4 +1,7 @@
-import { useEffect, useState } from "react";
+import TicketStatusHistory from "../components/TicketStatusHistory.js";
+import "./ticketDetail.css";
+import ActionsTaken from "../components/ActionsTaken.js";
+import { useEffect, useRef, useState } from "react";
 import {
   Link,
   useNavigate,
@@ -10,6 +13,7 @@ import {
   createPublicComment,
   downloadAttachment,
   fetchStaffOwners,
+  fetchActionAssignees,
   fetchStaffTicketDetail,
   Priority,
   StaffOwner,
@@ -55,7 +59,7 @@ const internalPanelStyle: React.CSSProperties = {
 
 const PRIORITY_COLORS: Record<Priority, string> = {
   LOW: "#0B7A46",
-  MEDIUM: "#B8860B",
+  MEDIUM: zenGreen.warningBackground,
   HIGH: "#B3261E",
 };
 
@@ -150,6 +154,7 @@ function PriorityBadge({
       style={{
         backgroundColor:
           PRIORITY_COLORS[priority],
+        color: priority === "MEDIUM" ? zenGreen.text : "white",
       }}
     >
       {label(priority)}
@@ -200,8 +205,10 @@ export default function StaffTicketDetail() {
   const { id } = useParams<{
     id: string;
   }>();
+  const routeIdentity = useRef({ id, generation: 0 });
+  if (routeIdentity.current.id !== id) routeIdentity.current = { id, generation: routeIdentity.current.generation + 1 };
   const navigate = useNavigate();
-  const { refreshUser } = useAuth();
+  const { user, refreshUser } = useAuth();
 
   const [state, setState] =
     useState<ScreenState>("loading");
@@ -212,6 +219,7 @@ export default function StaffTicketDetail() {
   const [owners, setOwners] = useState<
     StaffOwner[]
   >([]);
+  const [actionAssignees, setActionAssignees] = useState<StaffOwner[]>([]);
   const [selectedOwnerId, setSelectedOwnerId] =
     useState("");
   const [selectedPriority, setSelectedPriority] =
@@ -255,7 +263,7 @@ export default function StaffTicketDetail() {
     return false;
   }
 
-  async function load() {
+  async function load(background = false) {
     if (!id) {
       setState("not-found");
       return;
@@ -271,19 +279,21 @@ export default function StaffTicketDetail() {
       return;
     }
 
-    setState("loading");
+    if (!background) setState("loading");
     setMessage("");
     setOperationError("");
 
     try {
-      const [detail, ownerRows] =
+      const [detail, ownerRows, assignees] =
         await Promise.all([
           fetchStaffTicketDetail(ticketId),
           fetchStaffOwners(),
+          fetchActionAssignees(),
         ]);
 
       setTicket(detail);
       setOwners(ownerRows);
+      setActionAssignees(assignees);
       setSelectedOwnerId(
         detail.owner
           ? String(detail.owner.id)
@@ -316,12 +326,20 @@ export default function StaffTicketDetail() {
         }
       }
 
-      setState("error");
+      if (background) setOperationError("Could not refresh the Ticket. Your Action draft is retained; retry the Ticket refresh.");
+      else setState("error");
     }
   }
 
   useEffect(() => {
     void load();
+  }, [id]);
+
+  const [actionsRevision, setActionsRevision] = useState(0);
+  const [statusConflict, setStatusConflict] = useState(false);
+  useEffect(() => {
+    setStatusConflict(false);
+    return () => { routeIdentity.current = { ...routeIdentity.current, generation: routeIdentity.current.generation + 1 }; };
   }, [id]);
 
   async function runOperation(
@@ -335,8 +353,9 @@ export default function StaffTicketDetail() {
 
     try {
       await action();
+      if (name === "status") { setActionsRevision(value => value + 1); setStatusConflict(false); }
       setMessage(successMessage);
-      await load();
+      await load(true);
       setMessage(successMessage);
     } catch (failure) {
       if (
@@ -353,6 +372,8 @@ export default function StaffTicketDetail() {
           string,
           string
         > = {
+          RESOLUTION_BLOCKED: "Complete all non-cancelled Actions and record outstanding follow-up outcomes before resolving this Ticket.",
+          STALE_UPDATE: "The Ticket status changed. Reload and review its current status before trying again. Your Action drafts are retained.",
           TICKET_ALREADY_ASSIGNED:
             "This ticket was already assigned. Reloaded data may have changed.",
           INVALID_OWNER:
@@ -365,6 +386,7 @@ export default function StaffTicketDetail() {
             "You do not have permission to perform this operation.",
         };
 
+        if (failure.code === "STALE_UPDATE") setStatusConflict(true);
         setOperationError(
           messages[failure.code] ??
             "The operation could not be completed."
@@ -431,7 +453,7 @@ export default function StaffTicketDetail() {
   }
 
   async function handleStatusSave() {
-    if (!ticket || !selectedStatus) {
+    if (!ticket || !selectedStatus || statusConflict || !STATUS_TRANSITIONS[ticket.status].includes(selectedStatus)) {
       return;
     }
 
@@ -453,7 +475,8 @@ export default function StaffTicketDetail() {
       () =>
         updateStaffTicketStatus(
           ticket.id,
-          selectedStatus
+          selectedStatus,
+          ticket.status
         ),
       `Status changed to ${label(
         selectedStatus
@@ -492,7 +515,7 @@ export default function StaffTicketDetail() {
         content
       );
       setPublicContent("");
-      await load();
+      await load(true);
       setMessage(
         "Public Comment posted."
       );
@@ -611,7 +634,8 @@ export default function StaffTicketDetail() {
       >
         <Link
           to="/staff/tickets"
-          className="d-inline-block mb-3 small"
+          className="ticket-back-link d-inline-block mb-3 small"
+          style={{ color: zenGreen.primary }}
         >
           ← Back to Ticket Queue
         </Link>
@@ -650,7 +674,8 @@ export default function StaffTicketDetail() {
     >
       <Link
         to="/staff/tickets"
-        className="d-inline-block mb-3 small"
+        className="ticket-back-link d-inline-block mb-3 small"
+          style={{ color: zenGreen.primary }}
       >
         ← Back to Ticket Queue
       </Link>
@@ -686,6 +711,7 @@ export default function StaffTicketDetail() {
           role="alert"
         >
           {operationError}
+          {operationError.startsWith("Complete all non-cancelled Actions") && <div><a href={`#actions-${ticket.id}`}>Review Actions Taken</a></div>}
         </div>
       )}
 
@@ -1009,7 +1035,7 @@ export default function StaffTicketDetail() {
               type="button"
               className="btn btn-outline-secondary mt-2"
               disabled={
-                operation !== null ||
+                operation !== null || statusConflict ||
                 !selectedStatus
               }
               onClick={() =>
@@ -1361,6 +1387,32 @@ export default function StaffTicketDetail() {
           </div>
         </form>
       </section>
+      {statusConflict && <button type="button" className="btn btn-outline-success mb-3" onClick={async () => {
+        const requestedRoute = routeIdentity.current;
+        const stillCurrent = () => routeIdentity.current.id === requestedRoute.id && routeIdentity.current.generation === requestedRoute.generation;
+        try {
+          const latest = await fetchStaffTicketDetail(ticket.id);
+          if (!stillCurrent() || latest.id !== Number(requestedRoute.id)) return;
+          setTicket(latest); setStatusConflict(false); setActionsRevision(value => value + 1);
+          setOperationError("Current Ticket status loaded. Review and select a permitted transition before submitting.");
+          setSelectedStatus("");
+        } catch (error) { if (stillCurrent() && !(await handleAuthFailure(error))) setOperationError("Could not reload Ticket status. Your drafts are retained."); }
+      }}>Reload and Review Ticket Status</button>}
+      <TicketStatusHistory key={`history-${ticket.id}`} ticketId={ticket.id} refreshKey={actionsRevision} />
+      <ActionsTaken ticketStatus={ticket.status} refreshKey={actionsRevision} key={ticket.id} ticketId={ticket.id} canWrite={user?.role === "IT_STAFF" || user?.role === "ADMINISTRATOR"} owners={actionAssignees}
+        onRefresh={async () => {
+          try {
+            const latest = await fetchStaffTicketDetail(ticket.id);
+            setTicket(current => current?.id === latest.id ? latest : current);
+          } catch (error) {
+            if (await handleAuthFailure(error)) return;
+            if (error instanceof StaffTicketOperationError && (error.status === 403 || error.status === 404)) {
+              setTicket(null); setState(error.status === 403 ? "forbidden" : "not-found");
+            }
+            throw error;
+          }
+        }}
+        onRefreshOwners={() => { void fetchActionAssignees().then(setActionAssignees).catch(() => setOperationError("Could not refresh eligible staff. Please reload the Ticket.")); }} />
     </div>
   );
 }

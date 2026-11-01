@@ -1,3 +1,10 @@
+import { ticketStatusHistory } from "./ticketStatusHistory.js";
+import { requesterDashboard } from "./requesterDashboard.js";
+import { validateRequesterTicketQuery } from "./validateRequesterTicketQuery.js";
+import { staffDashboard } from "./staffDashboard.js";
+import { openTickets, ticketsWithMyActions } from "./staffTicketFilters.js";
+import { transitionTicket, validateTicketTransition } from "./ticketWorkflow.js";
+import { ActionError } from "./validateActionTaken.js";
 import express, { Request, Response } from "express";
 import cors from "cors";
 import fs from "fs";
@@ -8,12 +15,9 @@ import { Prisma } from "@prisma/client";
 
 import { getPrisma } from "./prisma.js";
 import { adminUsers } from "./adminUsers.js";
+import { actionsTaken, actionBodyError } from "./actionsTaken.js";
 import { validateCreateTicket } from "./validateCreateTicket.js";
 import { validateStaffQueueQuery } from "./validateStaffQueueQuery.js";
-import {
-  canTransitionTicketStatus,
-  isTicketStatus,
-} from "./statusTransitions.js";
 import { createTicketWithGeneratedNumber } from "./ticketNumber.js";
 import { upload, UPLOADS_DIR } from "./attachmentUpload.js";
 import {
@@ -59,6 +63,9 @@ app.use(
 app.use(express.json());
 app.use(cookieParser());
 app.use("/api/admin/users", adminUsers);
+app.use("/api/tickets/:ticketId/actions", actionsTaken);
+app.use("/api/tickets/:ticketId/status-history", ticketStatusHistory);
+app.use("/api/tickets/:ticketId/actions", actionBodyError);
 
 // ---------------------------------------------------------------------------
 // Issue 2 — API health check
@@ -430,6 +437,21 @@ app.get(
   }
 );
 
+// Action assignment has narrower eligibility than legacy Ticket ownership.
+app.get("/api/staff/action-assignees", requireAuth, requirePasswordChanged, requireRole("IT_STAFF", "ADMINISTRATOR"), async (_req, res) => {
+  try {
+    const assignees = await getPrisma().user.findMany({
+      where: { isActive: true, role: "IT_STAFF" },
+      select: { id: true, name: true, email: true, role: true },
+      orderBy: [{ name: "asc" }, { id: "asc" }],
+    });
+    res.json(assignees);
+  } catch { res.status(500).json({ error: "UNEXPECTED_ERROR" }); }
+});
+
+app.use("/api/dashboard/staff", staffDashboard);
+app.use("/api/dashboard/requester", requesterDashboard);
+
 app.get(
   "/api/staff/tickets",
   requireAuth,
@@ -462,6 +484,10 @@ app.get(
         status: query.status,
         ownerId: query.owner === "unassigned" ? null : query.owner === "me" ? req.authUser!.id : query.owner,
       };
+      where.AND = [
+        ...(query.statusGroup ? [openTickets()] : []),
+        ...(query.myAction ? [ticketsWithMyActions(req.authUser!.id)] : []),
+      ];
       if (query.search) {
         const match = { contains: query.search, mode: "insensitive" as const };
         where.OR = [
@@ -962,76 +988,16 @@ app.patch(
       return;
     }
 
-    const { status } = req.body as {
-      status?: unknown;
-    };
-
-    if (!isTicketStatus(status)) {
-      res.status(400).json({
-        error: "VALIDATION_FAILED",
-        fields: {
-          status: "Choose a valid Ticket status.",
-        },
-      });
-      return;
-    }
-
     try {
-      const prisma = getPrisma();
-
-      const ticket = await prisma.ticket.findUnique({
-        where: {
-          id: ticketId,
-        },
-        select: {
-          id: true,
-          status: true,
-        },
-      });
-
-      if (!ticket) {
-        res.status(404).json({
-          error: "TICKET_NOT_FOUND",
-        });
-        return;
+      const { status, expectedStatus } = validateTicketTransition(req.body);
+      res.status(200).json(await transitionTicket(req, ticketId, status, expectedStatus));
+    } catch (error) {
+      if (error instanceof ActionError) {
+        res.status(error.status).json({ error: error.code, ...(error.fields ? { fields: error.fields } : {}) });
+      } else {
+        console.error("Failed to update Ticket status.");
+        res.status(500).json({ error: "UNEXPECTED_ERROR" });
       }
-
-      if (
-        !canTransitionTicketStatus(
-          ticket.status,
-          status
-        )
-      ) {
-        res.status(409).json({
-          error: "INVALID_STATUS_TRANSITION",
-        });
-        return;
-      }
-
-      const updated = await prisma.ticket.update({
-        where: {
-          id: ticketId,
-        },
-        data: {
-          status,
-        },
-        select: {
-          id: true,
-          status: true,
-          ownerId: true,
-        },
-      });
-
-      res.status(200).json(updated);
-    } catch (err) {
-      console.error(
-        "Failed to update Ticket status:",
-        err
-      );
-
-      res.status(500).json({
-        error: "UNEXPECTED_ERROR",
-      });
     }
   }
 );
@@ -1045,12 +1011,6 @@ app.patch(
 // It comes from the authenticated Session (req.authUser.id).
 // BR-08/BR-09 ownership still applies.
 // ---------------------------------------------------------------------------
-const SORTABLE_FIELDS = [
-  "ticketNumber",
-  "createdAt",
-  "updatedAt",
-] as const;
-
 app.get(
   "/api/tickets",
   requireAuth,
@@ -1063,104 +1023,12 @@ app.get(
     const requesterId =
       req.authUser!.id;
 
-    const {
-      search,
-      category,
-      requestedPriority,
-      itPriority,
-      currentStatus,
-    } = req.query as Record<
-      string,
-      string | undefined
-    >;
-
-    // BR-12: default sort createdAt desc. Invalid values fall back silently.
-    const sortBy =
-      SORTABLE_FIELDS.includes(
-        req.query.sortBy as
-          (typeof SORTABLE_FIELDS)[number]
-      )
-        ? (req.query.sortBy as
-            (typeof SORTABLE_FIELDS)[number])
-        : "createdAt";
-
-    const sortDir =
-      req.query.sortDir === "asc"
-        ? "asc"
-        : "desc";
-
-    // BR-13: page default 1, pageSize default 10 capped at 50.
-    // Invalid values fall back to defaults.
-    const pageParsed = Number(
-      req.query.page
-    );
-
-    const page =
-      Number.isInteger(pageParsed) &&
-      pageParsed > 0
-        ? pageParsed
-        : 1;
-
-    const pageSizeParsed = Number(
-      req.query.pageSize
-    );
-
-    const pageSize =
-      Number.isInteger(
-        pageSizeParsed
-      ) && pageSizeParsed > 0
-        ? Math.min(
-            pageSizeParsed,
-            50
-          )
-        : 10;
-
-    const where: Record<
-      string,
-      unknown
-    > = {
-      requesterId,
-    };
-
-    // BR-10: search matches Ticket Number or Summary, case-insensitive.
-    if (search) {
-      where.OR = [
-        {
-          ticketNumber: {
-            contains: search,
-            mode: "insensitive",
-          },
-        },
-        {
-          summary: {
-            contains: search,
-            mode: "insensitive",
-          },
-        },
-      ];
-    }
-
-    // BR-11: filters combine with AND
-    // (each added key is already AND'd by Prisma).
-    if (category) {
-      where.categoryId =
-        Number(category);
-    }
-
-    if (requestedPriority) {
-      where.requestedPriority =
-        requestedPriority;
-    }
-
-    if (itPriority) {
-      where.itPriority =
-        itPriority;
-    }
-
-    if (currentStatus) {
-      where.status =
-        currentStatus;
-    }
+    const parsed = validateRequesterTicketQuery(req.query);
+    if (parsed.fields) { res.status(400).json({ error: "INVALID_QUERY", fields: parsed.fields }); return; }
+    const { search, category, requestedPriority, itPriority, currentStatus, statusGroup, sortBy, sortDir, page, pageSize } = parsed.value!;
+    const where: Prisma.TicketWhereInput = { requesterId, categoryId:category, requestedPriority, itPriority,
+      status:currentStatus, ...(statusGroup ? { AND:[openTickets()] } : {}) };
+    if (search) where.OR = [{ticketNumber:{contains:search,mode:"insensitive"}},{summary:{contains:search,mode:"insensitive"}}];
 
     try {
       const prisma = getPrisma();
@@ -1226,10 +1094,7 @@ app.get(
           totalItems === 0,
       });
     } catch (err) {
-      console.error(
-        "Failed to list tickets:",
-        err
-      );
+      console.error("Failed to list requester Tickets.");
 
       res.status(500).json({
         error: "UNEXPECTED_ERROR",

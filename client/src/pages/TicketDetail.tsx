@@ -1,3 +1,7 @@
+import TicketStatusHistory from "../components/TicketStatusHistory.js";
+import { zenGreen } from "../theme.js";
+import "./ticketDetail.css";
+import ActionsTaken from "../components/ActionsTaken.js";
 import {
   ChangeEvent,
   FormEvent,
@@ -52,7 +56,7 @@ function priorityColor(priority: string) {
     case "HIGH":
       return "#b42318";
     case "MEDIUM":
-      return "#b8860b";
+      return zenGreen.warningBackground;
     case "LOW":
       return "#526d5c";
     default:
@@ -558,7 +562,8 @@ export default function TicketDetail() {
       >
         <Link
           to="/tickets"
-          className="d-inline-block mb-3 small"
+          className="ticket-back-link d-inline-block mb-3 small"
+          style={{ color: zenGreen.primary }}
         >
           ← Back to My Tickets
         </Link>
@@ -585,11 +590,13 @@ export default function TicketDetail() {
       className="container py-5"
       style={{
         maxWidth: 840,
+        overflowWrap: "anywhere",
       }}
     >
       <Link
         to="/tickets"
-        className="d-inline-block mb-3 small"
+        className="ticket-back-link d-inline-block mb-3 small"
+          style={{ color: zenGreen.primary }}
       >
         ← Back to My Tickets
       </Link>
@@ -669,6 +676,7 @@ export default function TicketDetail() {
                   priorityColor(
                     ticket.requestedPriority
                   ),
+                color: ticket.requestedPriority === "MEDIUM" ? zenGreen.text : "white",
               }}
             >
               {
@@ -1141,6 +1149,8 @@ export default function TicketDetail() {
           )}
         </form>
       </div>
+      <TicketStatusHistory key={`history-${ticket.id}`} ticketId={ticket.id} />
+      <ActionsTaken key={ticket.id} ticketId={ticket.id} />
     </div>
   );
 }

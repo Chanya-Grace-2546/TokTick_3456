@@ -1,3 +1,6 @@
+vi.mock("../../src/components/TicketStatusHistory.js", () => ({ default: () => null }));
+// Actions integration has dedicated Lab 4 coverage; preserve legacy assertions.
+vi.mock("../../src/components/ActionsTaken.js", () => ({ default: () => null }));
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -19,6 +22,7 @@ vi.mock("../../src/api.js", async () => {
     ...actual,
     fetchStaffTicketDetail: vi.fn(),
     fetchStaffOwners: vi.fn(),
+    fetchActionAssignees: vi.fn().mockResolvedValue([]),
     claimStaffTicket: vi.fn(),
     updateStaffTicketOwner: vi.fn(),
     updateStaffTicketPriority: vi.fn(),
@@ -305,7 +309,8 @@ describe("Lab 3 Issue 6 — Staff Ticket Detail", () => {
     await waitFor(() => {
       expect(api.updateStaffTicketStatus).toHaveBeenCalledWith(
         42,
-        "IN_PROGRESS"
+        "IN_PROGRESS",
+        "OPEN"
       );
     });
   });

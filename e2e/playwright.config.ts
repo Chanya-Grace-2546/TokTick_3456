@@ -2,34 +2,30 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: ".",
-  testMatch: ["lab-03/**/*.spec.ts"],
-  globalSetup: "./lab-03/global-setup.ts",
+  testMatch: ["lab-03/**/*.spec.ts", "lab-04/**/*.spec.ts"],
+  globalSetup: "./global-setup.ts",
   fullyParallel: false,
   workers: 1,
   retries: 0,
-  reporter: [["list"], ["html", { open: "never" }]],
+  reporter: [["list"]],
+  outputDir: process.env.TOKTICKIT_E2E_OUTPUT_DIR || "/tmp/toktickit-e2e-results",
   use: {
     baseURL: "http://localhost:5173",
     trace: "retain-on-failure",
-  },
-  webServer: {
-    command: "npm run dev --prefix ../client",
-    url: "http://localhost:5173",
-    reuseExistingServer: true,
   },
   projects: [
     {
       name: "desktop",
       use: {
         ...devices["Desktop Chrome"],
-        viewport: { width: 1280, height: 800 },
+        viewport: { width: 1440, height: 800 },
       },
     },
     {
       name: "tablet",
       use: {
         ...devices["Desktop Chrome"],
-        viewport: { width: 850, height: 1100 },
+        viewport: { width: 768, height: 1100 },
       },
     },
     {

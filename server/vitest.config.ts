@@ -1,9 +1,10 @@
 import { defineConfig } from "vitest/config";
-import { loadEnv } from "vite";
+import { randomUUID } from "node:crypto";
+import { explicitTestUrl, testRunId } from "./tests/helpers/databaseSafety.mjs";
 
-// Read connection settings, never use the development schema in a test worker.
-const databaseUrl = process.env.DATABASE_URL ?? loadEnv("test", process.cwd(), "").DATABASE_URL;
-
+// Explicit connection only; neither DATABASE_URL nor .env is a fallback.
+const url = explicitTestUrl();
+const runId = process.env.TOKTICKIT_TEST_RUN_ID ? testRunId() : randomUUID();
 export default defineConfig({
   test: {
     environment: "node",
@@ -11,6 +12,7 @@ export default defineConfig({
     pool: "forks",
     fileParallelism: false,
     setupFiles: ["./tests/isolation.setup.ts"],
-    env: { DATABASE_URL: databaseUrl ?? "" },
+    env: { TOKTICKIT_TEST_DATABASE_URL: url.toString(), TOKTICKIT_TEST_RUN_ID: runId,
+      DATABASE_URL: url.toString() },
   },
 });

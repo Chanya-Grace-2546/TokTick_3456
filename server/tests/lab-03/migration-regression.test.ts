@@ -32,7 +32,7 @@ describe("MIG-01–04 populated historical migration and seed", () => {
     return { users: await prisma.user.count(), tickets: await prisma.ticket.count(), attachments: await prisma.attachment.count(), categories: await prisma.category.count(), systems: await prisma.relatedSystem.count(), comments: await prisma.publicComment.count(), notes: await prisma.internalNote.count() };
   }
   beforeAll(async () => {
-    fixture.deploy("lab2");
+    await fixture.deploy("lab2");
     await prisma.$executeRawUnsafe(`INSERT INTO "Category" (id,name) VALUES (1,'Hardware')`);
     await prisma.$executeRawUnsafe(`INSERT INTO "RelatedSystem" (id,name) VALUES (1,'Corporate Laptop')`);
     await prisma.$executeRawUnsafe(`INSERT INTO "DevelopmentRequester" (id,name,email,"isActive") VALUES (41,'Historical Active','history.active@example.test',true),(42,'Historical Inactive','history.inactive@example.test',false)`);
@@ -47,7 +47,7 @@ describe("MIG-01–04 populated historical migration and seed", () => {
       await prisma.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('"${table}"','id'),(SELECT MAX(id) FROM "${table}"))`);
     }
     before = await snapshot(false);
-    fixture.deploy("lab3");
+    await fixture.deploy("lab3");
     after = await snapshot(true);
   }, 65_000);
   afterAll(async () => { await fixture.dispose(); });
@@ -90,16 +90,16 @@ describe("MIG-01–04 populated historical migration and seed", () => {
   it("MIG-03 safety: redeploy never overwrites legitimate post-Lab-3 changes, including changes on historical Tickets", async () => {
     await prisma.ticket.update({ where: { id: 103 }, data: { itPriority: "HIGH" } });
     const fresh = await prisma.ticket.create({ data: { ticketNumber: "POST-LAB3", requesterId: 41, categoryId: 1, relatedSystemId: 1, summary: "After migration", description: "Legitimate staff priority", requestedPriority: "LOW", itPriority: "HIGH" } });
-    fixture.deploy("lab3");
+    await fixture.deploy("lab3");
     for (const id of [103, fresh.id]) expect((await prisma.ticket.findUniqueOrThrow({ where: { id } })).itPriority).toBe("HIGH");
   });
 
   describe("MIG-04 actual seed reruns", () => {
     beforeAll(async () => {
-      fixture.seed();
+      await fixture.seed();
       afterFirstSeed = await counts();
       userIdentityAfterFirstSeed = await prisma.user.findMany({ select: { id: true, email: true, passwordHash: true, mustChangePassword: true }, orderBy: { id: "asc" } });
-      fixture.seed();
+      await fixture.seed();
       afterSecondSeed = await counts();
       userIdentityAfterSecondSeed = await prisma.user.findMany({ select: { id: true, email: true, passwordHash: true, mustChangePassword: true }, orderBy: { id: "asc" } });
       historicalTicketsAfterSeed = (await snapshot(true)).tickets;

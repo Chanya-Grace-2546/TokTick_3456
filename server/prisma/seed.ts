@@ -1,13 +1,16 @@
 import bcrypt from "bcryptjs";
 import {
+  ActionState,
+  Prisma,
   Priority,
   Role,
   TicketStatus,
 } from "@prisma/client";
 import { getPrisma } from "../src/prisma.js";
 
-async function main() {
-  const prisma = getPrisma();
+async function seed(prisma: Prisma.TransactionClient) {
+  // Serialize repeat/concurrent seed runs; all fixture writes are create-only.
+  await prisma.$executeRaw`SELECT pg_advisory_xact_lock(44200402)`;
 
   // -------------------------------------------------------------------------
   // Lab 3 local-development initial password
@@ -33,7 +36,7 @@ async function main() {
   for (const name of categoryNames) {
     await prisma.category.upsert({
       where: { name },
-      update: { isActive: true },
+      update: {},
       create: {
         name,
         isActive: true,
@@ -58,7 +61,7 @@ async function main() {
   for (const name of relatedSystemNames) {
     await prisma.relatedSystem.upsert({
       where: { name },
-      update: { isActive: true },
+      update: {},
       create: {
         name,
         isActive: true,
@@ -152,11 +155,7 @@ async function main() {
       where: {
         email: user.email,
       },
-      update: {
-        name: user.name,
-        role: user.role,
-        isActive: user.isActive,
-      },
+      update: {},
       create: {
         name: user.name,
         email: user.email,
@@ -415,9 +414,62 @@ async function main() {
     }
   }
 
-  console.log("Lab 3 seed complete.");
+  // Stable creation-history markers survive subsequent edits to demo Actions.
+  // No extra uniqueness rule or seed-only column is imposed on production Actions.
+  const eligible = (user: typeof alex) => user.isActive &&
+    (user.role === Role.IT_STAFF || user.role === Role.ADMINISTRATOR);
+  if (eligible(alex) && eligible(priya) &&
+      ticket1.requesterId === jennifer.id &&
+      ticket1.summary === "Unable to access university email") {
+    const fixtures = [
+      { key: "planned", state: ActionState.PLANNED, description: "Plan account diagnostics", result: null, followUpRequired: false, followUpNote: null },
+      { key: "in-progress", state: ActionState.IN_PROGRESS, description: "Inspect account access", result: null, followUpRequired: true, followUpNote: "Confirm access with requester" },
+      { key: "completed", state: ActionState.COMPLETED, description: "Test account configuration", result: "Configuration checks passed", followUpRequired: false, followUpNote: null },
+      { key: "cancelled", state: ActionState.CANCELLED, description: "Replace obsolete diagnostic step", result: null, followUpRequired: false, followUpNote: null },
+    ];
+    for (const [index, fixture] of fixtures.entries()) {
+      const seedKey = `lab4-action-${fixture.key}`;
+      const existing = await prisma.actionTakenHistory.findFirst({
+        where: { afterJson: { path: ["seedKey"], equals: seedKey } },
+      });
+      if (existing) continue;
+      const { key, ...data } = fixture;
+      const action = await prisma.actionTaken.create({ data: {
+        ...data, ticketId: ticket1.id, performedByUserId: priya.id,
+        assignedToUserId: index === 3 ? null : alex.id,
+        actionAt: new Date(`2026-10-22T${String(9 + index).padStart(2, "0")}:00:00Z`),
+        attachmentNotes: "See existing Ticket attachments",
+      } });
+      await prisma.actionTakenHistory.create({ data: {
+        actionId: action.id, actorUserId: priya.id, newState: action.state,
+        afterJson: { ...JSON.parse(JSON.stringify(action)), seedKey },
+      } });
+    }
+  } else {
+    console.log("Skipped Lab 4 multi-Action fixtures: existing Ticket/staff differs from demo prerequisites.");
+  }
+  if (eligible(priya) && ticket3.requesterId === sarah.id &&
+      ticket3.summary === "VPN connection fails off campus") {
+    const seedKey = "lab4-action-vpn";
+    if (!await prisma.actionTakenHistory.findFirst({ where: { afterJson: { path: ["seedKey"], equals: seedKey } } })) {
+      const action = await prisma.actionTaken.create({ data: {
+        ticketId: ticket3.id, performedByUserId: priya.id,
+        description: "Review VPN configuration", state: ActionState.PLANNED,
+      } });
+      await prisma.actionTakenHistory.create({ data: {
+        actionId: action.id, actorUserId: priya.id, newState: action.state,
+        afterJson: { ...JSON.parse(JSON.stringify(action)), seedKey },
+      } });
+    }
+  }
+  // No Ticket status events are fabricated for legacy Tickets.
+}
+
+async function main() {
+  await getPrisma().$transaction(seed, { timeout: 60000 });
+  console.log("Lab 3/4 seed complete (existing records preserved).");
   console.log("");
-  console.log("All seeded users require a password change at first login.");
+  console.log("New seeded users require a password change at first login.");
 }
 
 main()

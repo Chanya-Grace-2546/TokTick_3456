@@ -1,12 +1,12 @@
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   Category, Priority, StaffOwner, StaffQueueError, StaffQueueItem,
   StaffQueueParams, StaffQueueResponse, StaffQueueSort, StaffTicketStatus,
   fetchCategories, fetchStaffOwners, fetchStaffTickets,
 } from "../api.js";
 import { useAuth } from "../context/AuthContext.js";
-import { zenGreen } from "../theme.js";
+import { ticketTableHeaderStyle, zenGreen } from "../theme.js";
 
 const DEFAULT_QUERY: StaffQueueParams = { sortBy: "updatedAt", sortDir: "desc", page: 1, pageSize: 10 };
 const STATUSES: StaffTicketStatus[] = ["NEW", "OPEN", "IN_PROGRESS", "WAITING_FOR_REQUESTER", "RESOLVED", "CLOSED", "REOPENED", "CANCELLED"];
@@ -45,7 +45,25 @@ function Updated({ date }: { date: string }) {
 export default function StaffTicketQueue() {
   const { refreshUser } = useAuth();
   const navigate = useNavigate();
-  const [query, setQuery] = useState<StaffQueueParams>(DEFAULT_QUERY);
+  const location = useLocation();
+  useEffect(() => {
+    if (location.hash === "#queue-search") document.getElementById("queue-search")?.focus();
+  }, [location.hash]);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const query = useMemo(() => {
+    const values: Record<string, unknown> = Object.assign(Object.create(null), DEFAULT_QUERY);
+    for (const [key, value] of searchParams) {
+      values[key] = ["page", "pageSize", "category"].includes(key) || (key === "owner" && /^\d+$/.test(value))
+        ? (/^\d+$/.test(value) ? Number(value) : value) : key === "myAction" && value === "true" ? true : value;
+    }
+    return values as StaffQueueParams;
+  }, [searchParams]);
+  function setQuery(next: StaffQueueParams | ((current: StaffQueueParams) => StaffQueueParams)) {
+    const values = typeof next === "function" ? next(query) : next;
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(values)) if (value !== undefined && value !== "") params.set(key, String(value));
+    setSearchParams(params);
+  }
   const [data, setData] = useState<StaffQueueResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
@@ -68,7 +86,9 @@ export default function StaffTicketQueue() {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetchStaffTickets(query).then(result => {
+    const invalid = Object.fromEntries([...searchParams.keys()].filter(key => searchParams.getAll(key).length !== 1 || (key !== "search" && searchParams.get(key) === "")).map(key => [key, "Supply one valid value."]));
+    const request = Object.keys(invalid).length ? Promise.reject(new StaffQueueError(400, "INVALID_QUERY", invalid)) : fetchStaffTickets(query);
+    request.then(result => {
       if (cancelled) return;
       setData(result);
       setLoading(false);
@@ -103,7 +123,7 @@ export default function StaffTicketQueue() {
     setQuery(current => ({ ...current, ...values, page: 1 }));
   }
 
-  const hasFilters = Boolean(query.search || query.category || query.requestedPriority || query.itPriority || query.status || query.owner);
+  const hasFilters = Object.entries(query).some(([key, value]) => !["page", "pageSize", "sortBy", "sortDir"].includes(key) && value !== undefined && value !== "");
   const fieldErrors = error instanceof StaffQueueError ? error.fields : {};
   const errorMessage = error instanceof StaffQueueError && error.code === "FORBIDDEN"
     ? "You do not have permission to view the ticket queue."
@@ -138,6 +158,7 @@ export default function StaffTicketQueue() {
           </div>
         </div>
 
+        {(query.statusGroup || query.myAction) && <p className="mt-3 mb-0" role="status">Dashboard filters: {query.statusGroup ? "Open-work Tickets" : ""}{query.statusGroup && query.myAction ? " · " : ""}{query.myAction ? "Tickets with my assigned unfinished Actions" : ""}</p>}
         {filtersError && <div role="alert" className="mt-3"><span>Could not load queue filters.</span> <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => setFiltersRetry(n => n + 1)}>Retry filters</button></div>}
 
         <div id="queue-filters" hidden={!filtersOpen}>
@@ -207,17 +228,17 @@ export default function StaffTicketQueue() {
         {data.items.length === 0 ? <p className="p-4 text-center" style={panelStyle}>
           {data.totalItems > 0 ? "No tickets on this page. Use Previous to return." : hasFilters ? "No tickets match your search or filters." : "No tickets in the queue."}
         </p> : <>
-          <div className="d-none d-lg-block" style={panelStyle}>
+          <div className="d-none d-lg-block" style={{ ...panelStyle, borderRadius: 10, overflow: "hidden" }}>
             <table className="table align-middle mb-0" aria-label="Ticket Queue" style={{ tableLayout: "fixed", width: "100%" }}>
               <thead><tr>
-<th scope="col" style={{ width: "14%" }}>Ticket Number</th>
-<th scope="col" style={{ width: "14%" }}>Requester</th>
-<th scope="col" style={{ width: "13%" }}>Updated</th>
-<th scope="col" style={{ width: "19%" }}>Summary</th>
-<th scope="col" style={{ width: "10%" }}>Requested Priority</th>
-<th scope="col" style={{ width: "8%" }}>IT Priority</th>
-<th scope="col" style={{ width: "12%" }}>Status</th>
-<th scope="col" style={{ width: "10%" }}>Owner</th>
+<th scope="col" style={{ ...ticketTableHeaderStyle, width: "14%" }}>Ticket Number</th>
+<th scope="col" style={{ ...ticketTableHeaderStyle, width: "14%" }}>Requester</th>
+<th scope="col" style={{ ...ticketTableHeaderStyle, width: "13%" }}>Updated</th>
+<th scope="col" style={{ ...ticketTableHeaderStyle, width: "19%" }}>Summary</th>
+<th scope="col" style={{ ...ticketTableHeaderStyle, width: "10%" }}>Requested Priority</th>
+<th scope="col" style={{ ...ticketTableHeaderStyle, width: "8%" }}>IT Priority</th>
+<th scope="col" style={{ ...ticketTableHeaderStyle, width: "12%" }}>Status</th>
+<th scope="col" style={{ ...ticketTableHeaderStyle, width: "10%" }}>Owner</th>
               </tr></thead>
               <tbody>{data.items.map(ticket => <tr
                 key={ticket.id}
@@ -240,7 +261,7 @@ export default function StaffTicketQueue() {
                 <td><PriorityBadge priority={ticket.requestedPriority} /></td>
                 <td><PriorityBadge priority={ticket.itPriority} /></td>
                 <td><Status status={ticket.status} /></td>
-<td style={{ overflowWrap: "normal", wordBreak: "normal" }}>
+<td style={{ overflowWrap: "anywhere", wordBreak: "normal" }}>
   {ticket.owner?.name ?? "Unassigned"}
 </td>
               </tr>)}</tbody>
@@ -280,7 +301,7 @@ export default function StaffTicketQueue() {
             >
               Ticket Number
             </div>
-            <div style={{ fontWeight: 600 }}>
+            <div className="ticket-link-label" style={{ fontWeight: 600 }}>
               {ticket.ticketNumber}
             </div>
           </div>

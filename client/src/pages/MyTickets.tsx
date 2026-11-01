@@ -1,9 +1,16 @@
-import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { fetchTickets, TicketListItem, Priority } from "../api.js";
-import { zenGreen } from "../theme.js";
+import { useAuth } from "../context/AuthContext.js";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { fetchTickets, TicketListItem, TicketListParams, RequesterApiError, Priority } from "../api.js";
+import { ticketTableHeaderStyle, zenGreen } from "../theme.js";
 
-type ScreenState = "loading" | "error" | "ready";
+const statusLabels: Record<string, string> = {
+  NEW: "New", OPEN: "Open", IN_PROGRESS: "In Progress",
+  WAITING_FOR_REQUESTER: "Waiting for Requester", RESOLVED: "Resolved",
+  CLOSED: "Closed", REOPENED: "Reopened", CANCELLED: "Cancelled",
+};
+
+type ScreenState = "loading" | "error" | "ready" | "forbidden";
 type SortField = "ticketNumber" | "createdAt" | "updatedAt";
 
 const cardStyle: React.CSSProperties = {
@@ -14,9 +21,9 @@ const cardStyle: React.CSSProperties = {
 };
 
 const PRIORITY_BADGE: Record<Priority, string> = {
-  LOW: "#0B7A46",
-  MEDIUM: "#B8860B",
-  HIGH: "#B3261E",
+  LOW: zenGreen.success,
+  MEDIUM: zenGreen.warningBackground,
+  HIGH: zenGreen.error,
 };
 
 const SORT_LABELS: Record<SortField, string> = {
@@ -31,69 +38,63 @@ const SORT_LABELS: Record<SortField, string> = {
 // Lab 3 — Requester identity now comes from the authenticated Session.
 export default function TicketsPlaceholder() {
   const navigate = useNavigate();
+  const location = useLocation();
+  useEffect(() => {
+    if (location.hash === "#ticket-search") document.getElementById("ticket-search")?.focus();
+  }, [location.hash]);
+  const sortTrigger = useRef<HTMLButtonElement>(null);
+  const sortId = useId();
+  const sortFocus = useRef<SortField>();
+  const headerButtons = useRef<Partial<Record<SortField, HTMLButtonElement | null>>>({});
+  const closeSort = () => { setSortMenuOpen(false); sortTrigger.current?.focus(); };
 
   const [state, setState] = useState<ScreenState>("loading");
   const [items, setItems] = useState<TicketListItem[]>([]);
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
 
-  const [search, setSearch] = useState("");
-  const [requestedPriority, setRequestedPriority] = useState("");
-  const [currentStatus, setCurrentStatus] = useState("");
-  const [sortBy, setSortBy] = useState<SortField>("createdAt");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
-  const [page, setPage] = useState(1);
-  const [sortMenuOpen, setSortMenuOpen] = useState(false);
-
-  const hasActiveFilters = Boolean(search || requestedPriority || currentStatus);
-
+  const { refreshUser } = useAuth();
+  const [params,setParams] = useSearchParams();
+  const [sortMenuOpen,setSortMenuOpen] = useState(false),[retry,setRetry] = useState(0);
+  const query = useMemo(()=>{
+    const values:Record<string,unknown>=Object.create(null);
+    for(const [key,value] of params) values[key]=key==="category"?Number(value):value;
+    const page=Number(params.get("page")),size=Number(params.get("pageSize"));
+    values.page=Number.isInteger(page)&&page>0?page:1;
+    if(params.has("pageSize"))values.pageSize=Number.isInteger(size)&&size>0?Math.min(size,50):10;
+    values.sortBy=["ticketNumber","createdAt","updatedAt"].includes(params.get("sortBy")??"")?params.get("sortBy"):"createdAt";
+    values.sortDir=params.get("sortDir")==="asc"?"asc":"desc";
+    return values as TicketListParams;
+  },[params]);
+  const search=query.search??"",requestedPriority=query.requestedPriority??"",currentStatus=query.status??query.currentStatus??"";
+  const sortBy=query.sortBy as SortField,sortDir=query.sortDir!,page=query.page!;
+  const hasActiveFilters=Object.entries(query).some(([key,value])=>!["page","pageSize","sortBy","sortDir","requesterId"].includes(key)&&value!==undefined&&value!=="");
+  function change(values:Record<string,string|number|undefined>,resetPage=true){
+    const next=new URLSearchParams(params);
+    for(const [key,value] of Object.entries(values)){if(value===undefined||value==="")next.delete(key);else next.set(key,String(value));}
+    if(resetPage)next.set("page","1");setParams(next);
+  }
+  useEffect(()=>{
+    let cancelled=false;setState("loading");setItems([]);
+    const duplicate=Array.from(params.keys()).some(key=>key!=="requesterId"&&params.getAll(key).length>1);
+    const request=duplicate?Promise.reject(new RequesterApiError(400,"INVALID_QUERY")):fetchTickets(query);
+    void request.then(res=>{if(cancelled)return;setItems(res.items);setTotalPages(res.totalPages);setTotalItems(res.totalItems);setState("ready");}).catch(async error=>{
+      if(cancelled)return;
+      if(error instanceof RequesterApiError&&(error.status===401||error.code==="PASSWORD_CHANGE_REQUIRED")){
+        await refreshUser();if(!cancelled)navigate(error.status===401?"/login":"/change-password",{replace:true});
+      }else if(error instanceof RequesterApiError&&error.status===403)setState("forbidden");else setState("error");
+    });return()=>{cancelled=true;};
+  },[query,retry]);
   useEffect(() => {
-    let cancelled = false;
-    setState("loading");
-
-    fetchTickets({
-      search: search || undefined,
-      requestedPriority: (requestedPriority as Priority) || undefined,
-      currentStatus: currentStatus || undefined,
-      sortBy,
-      sortDir,
-      page,
-    })
-      .then((res) => {
-        if (cancelled) return;
-        setItems(res.items);
-        setTotalPages(res.totalPages);
-        setTotalItems(res.totalItems);
-        setState("ready");
-      })
-      .catch(() => {
-        if (!cancelled) setState("error");
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [search, requestedPriority, currentStatus, sortBy, sortDir, page]);
-
-  function toggleSort(field: SortField) {
-    if (sortBy === field) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setSortBy(field);
-      setSortDir("desc");
-    }
-    setPage(1);
-  }
-
-  function clearFilters() {
-    setSearch("");
-    setRequestedPriority("");
-    setCurrentStatus("");
-    setPage(1);
-  }
+    if (state !== "ready" || !sortFocus.current) return;
+    if (document.activeElement === document.body) headerButtons.current[sortFocus.current]?.focus();
+    sortFocus.current = undefined;
+  }, [state]);
+  function toggleSort(field:SortField, fromHeader = false){if (fromHeader) sortFocus.current = field; change({sortBy:field,sortDir:sortBy===field&&sortDir==="desc"?"asc":"desc"});}
+  function clearFilters(){const next=new URLSearchParams({sortBy,sortDir,page:"1"});if(query.pageSize)next.set("pageSize",String(query.pageSize));setParams(next);}
 
   return (
-    <div className="container py-5" style={{ maxWidth: 960 }}>
+    <div className="container py-5" style={{ maxWidth: 1320 }}>
       <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
         <h1 className="h4 mb-0" style={{ color: zenGreen.text }}>
           My Tickets
@@ -123,13 +124,13 @@ export default function TicketsPlaceholder() {
         <div className="row g-2">
           <div className="col-12 col-md-6">
             <input
+              id="ticket-search"
               type="text"
               className="form-control"
               placeholder="Search by ticket number or summary…"
               value={search}
               onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
+                change({search:e.target.value});
               }}
               aria-label="Search tickets"
             />
@@ -140,8 +141,7 @@ export default function TicketsPlaceholder() {
               className="form-select"
               value={requestedPriority}
               onChange={(e) => {
-                setRequestedPriority(e.target.value);
-                setPage(1);
+                change({requestedPriority:e.target.value});
               }}
               aria-label="Filter by priority"
             >
@@ -157,8 +157,7 @@ export default function TicketsPlaceholder() {
               className="form-select"
               value={currentStatus}
               onChange={(e) => {
-                setCurrentStatus(e.target.value);
-                setPage(1);
+                change({currentStatus:e.target.value,status:undefined});
               }}
               aria-label="Filter by status"
             >
@@ -177,11 +176,13 @@ export default function TicketsPlaceholder() {
       </div>
 
       <div className="d-flex justify-content-between align-items-center mb-3">
-        <div className="position-relative">
+        <div className="position-relative" onKeyDown={event => { if (event.key === "Escape" && sortMenuOpen) { event.preventDefault(); closeSort(); } }}>
           <button
             type="button"
             className="btn btn-sm btn-outline-secondary"
             onClick={() => setSortMenuOpen((v) => !v)}
+            ref={sortTrigger}
+            aria-controls={sortId}
             aria-expanded={sortMenuOpen}
           >
             Sort: {SORT_LABELS[sortBy]} ({sortDir === "asc" ? "▲" : "▼"})
@@ -189,7 +190,8 @@ export default function TicketsPlaceholder() {
 
           {sortMenuOpen && (
             <div
-              role="menu"
+              id={sortId}
+              role="group" aria-label="Ticket sorting"
               className="position-absolute start-0 mt-1 bg-white shadow rounded"
               style={{ minWidth: 220, zIndex: 10 }}
             >
@@ -197,7 +199,6 @@ export default function TicketsPlaceholder() {
                 <button
                   key={field}
                   type="button"
-                  role="menuitem"
                   className="btn btn-sm w-100 text-start d-flex justify-content-between"
                   style={
                     sortBy === field
@@ -206,7 +207,7 @@ export default function TicketsPlaceholder() {
                   }
                   onClick={() => {
                     toggleSort(field);
-                    setSortMenuOpen(false);
+                    closeSort();
                   }}
                 >
                   <span>{SORT_LABELS[field]}</span>
@@ -220,11 +221,13 @@ export default function TicketsPlaceholder() {
         </div>
       </div>
 
+      {query.statusGroup && <p role="status">Dashboard filter: Open Tickets</p>}
+      {state === "forbidden" && <p role="alert">You do not have permission to view these Tickets.</p>}
       {state === "loading" && <p role="status">Loading tickets…</p>}
 
       {state === "error" && (
         <p role="alert" className="text-danger">
-          Couldn't load your tickets. Please try again.
+          Couldn't load your tickets. Please try again. <button type="button" className="btn btn-sm btn-outline-success" onClick={()=>setRetry(value=>value+1)}>Retry Tickets</button>
         </p>
       )}
 
@@ -256,45 +259,39 @@ export default function TicketsPlaceholder() {
         </div>
       )}
 
+      {state === "ready" && totalItems > 0 && items.length === 0 && <p role="status">No Tickets on this page. <button type="button" className="btn btn-sm btn-outline-success" onClick={()=>change({page:1},false)}>Return to first page</button></p>}
+
       {state === "ready" && items.length > 0 && (
         <>
           <div
-            className="table-responsive d-none d-lg-block"
-            style={cardStyle}
+            className="table-responsive requester-ticket-scroll d-none d-lg-block"
+            role="region" aria-label="My Tickets table" tabIndex={0}
+            style={{ ...cardStyle, borderRadius: 10 }}
           >
-            <table className="table mb-0">
+            <table className="table mb-0 requester-ticket-table">
               <thead>
                 <tr>
-                  <th
-                    role="button"
-                    onClick={() => toggleSort("ticketNumber")}
-                  >
-                    Ticket No.{" "}
-                    {sortBy === "ticketNumber" &&
-                      (sortDir === "asc" ? "▲" : "▼")}
+                  <th scope="col" style={ticketTableHeaderStyle} aria-sort={sortBy === "ticketNumber" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}>
+                    <button type="button" className="ticket-sort-button" ref={node => { headerButtons.current.ticketNumber = node; }} onClick={() => toggleSort("ticketNumber", true)}>
+                      Ticket No. {sortBy === "ticketNumber" && (sortDir === "asc" ? "▲" : "▼")}
+                    </button>
                   </th>
 
-                  <th>Summary</th>
-                  <th>Category</th>
-                  <th>Priority</th>
-                  <th>Status</th>
+                  <th scope="col" style={ticketTableHeaderStyle}>Summary</th>
+                  <th scope="col" style={ticketTableHeaderStyle}>Category</th>
+                  <th scope="col" style={ticketTableHeaderStyle}>Priority</th>
+                  <th scope="col" style={ticketTableHeaderStyle}>Status</th>
 
-                  <th
-                    role="button"
-                    onClick={() => toggleSort("createdAt")}
-                  >
-                    Created Date{" "}
-                    {sortBy === "createdAt" &&
-                      (sortDir === "asc" ? "▲" : "▼")}
+                  <th scope="col" style={ticketTableHeaderStyle} aria-sort={sortBy === "createdAt" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}>
+                    <button type="button" className="ticket-sort-button" ref={node => { headerButtons.current.createdAt = node; }} onClick={() => toggleSort("createdAt", true)}>
+                      Created Date {sortBy === "createdAt" && (sortDir === "asc" ? "▲" : "▼")}
+                    </button>
                   </th>
 
-                  <th
-                    role="button"
-                    onClick={() => toggleSort("updatedAt")}
-                  >
-                    Last Updated{" "}
-                    {sortBy === "updatedAt" &&
-                      (sortDir === "asc" ? "▲" : "▼")}
+                  <th scope="col" style={ticketTableHeaderStyle} aria-sort={sortBy === "updatedAt" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}>
+                    <button type="button" className="ticket-sort-button" ref={node => { headerButtons.current.updatedAt = node; }} onClick={() => toggleSort("updatedAt", true)}>
+                      Last Updated {sortBy === "updatedAt" && (sortDir === "asc" ? "▲" : "▼")}
+                    </button>
                   </th>
                 </tr>
               </thead>
@@ -304,9 +301,9 @@ export default function TicketsPlaceholder() {
                   <tr
                     key={t.id}
                     style={{ cursor: "pointer" }}
-                    onClick={() => navigate(`/tickets/${t.id}`)}
+                    onClick={event => { if (!(event.target as HTMLElement).closest("a")) navigate(`/tickets/${t.id}`); }}
                   >
-                    <td>{t.ticketNumber}</td>
+                    <td><Link to={`/tickets/${t.id}`} aria-label={`Open ticket ${t.ticketNumber}`}>{t.ticketNumber}</Link></td>
                     <td>{t.summary}</td>
                     <td>{t.category}</td>
 
@@ -316,13 +313,14 @@ export default function TicketsPlaceholder() {
                         style={{
                           backgroundColor:
                             PRIORITY_BADGE[t.requestedPriority],
+                          color: t.requestedPriority === "MEDIUM" ? zenGreen.text : "white",
                         }}
                       >
                         {t.requestedPriority}
                       </span>
                     </td>
 
-                    <td>{t.currentStatus}</td>
+                    <td>{statusLabels[t.currentStatus] ?? t.currentStatus}</td>
                     <td>{new Date(t.createdAt).toLocaleDateString()}</td>
                     <td>{new Date(t.updatedAt).toLocaleDateString()}</td>
                   </tr>
@@ -356,7 +354,7 @@ export default function TicketsPlaceholder() {
                       >
                         Ticket Number
                       </div>
-                      <div style={{ fontWeight: 600 }}>
+                      <div className="ticket-link-label" style={{ fontWeight: 600 }}>
                         {t.ticketNumber}
                       </div>
                     </div>
@@ -393,6 +391,7 @@ export default function TicketsPlaceholder() {
                         style={{
                           backgroundColor:
                             PRIORITY_BADGE[t.requestedPriority],
+                          color: t.requestedPriority === "MEDIUM" ? zenGreen.text : "white",
                         }}
                       >
                         {t.requestedPriority}
@@ -406,7 +405,7 @@ export default function TicketsPlaceholder() {
                       >
                         Status
                       </div>
-                      <div>{t.currentStatus}</div>
+                      <div>{statusLabels[t.currentStatus] ?? t.currentStatus}</div>
                     </div>
 
                     <div className="col-6">
@@ -444,7 +443,7 @@ export default function TicketsPlaceholder() {
                 type="button"
                 className="btn btn-sm btn-outline-secondary"
                 disabled={page <= 1}
-                onClick={() => setPage((p) => p - 1)}
+                onClick={() => change({page:page-1},false)}
               >
                 Previous
               </button>
@@ -457,7 +456,7 @@ export default function TicketsPlaceholder() {
                 type="button"
                 className="btn btn-sm btn-outline-secondary"
                 disabled={page >= totalPages}
-                onClick={() => setPage((p) => p + 1)}
+                onClick={() => change({page:page+1},false)}
               >
                 Next
               </button>

@@ -116,7 +116,7 @@ export async function requireAuth(
 
     next();
   } catch (error) {
-    console.error("Authentication check failed:", error);
+    console.error("Authentication check failed.");
     res.status(500).json({ error: "UNEXPECTED_ERROR" });
   }
 }

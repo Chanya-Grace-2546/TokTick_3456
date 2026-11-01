@@ -210,3 +210,11 @@ describe("AppShell role authorization", () => {
     ).not.toBeInTheDocument();
   });
 });
+
+describe('Issue 9 shell disclosures',()=>{
+ beforeEach(()=>vi.restoreAllMocks());
+ it.each(['REQUESTER','IT_STAFF','ADMINISTRATOR'] as const)('%s can dismiss account and mobile panels with Escape',async role=>{
+  vi.spyOn(api,'getMe').mockResolvedValue(user(role));renderShell();const account=await screen.findByRole('button',{name:/Jennifer Anderson/});fireEvent.click(account);expect(document.getElementById(account.getAttribute('aria-controls')!)).toBeInTheDocument();screen.getAllByRole('button',{name:'Sign Out'})[0].focus();fireEvent.keyDown(document.activeElement!,{key:'Escape'});expect(account).toHaveFocus();expect(account).toHaveAttribute('aria-expanded','false');
+  const mobile=screen.getByRole('button',{name:'Toggle navigation'});fireEvent.click(mobile);expect(document.getElementById(mobile.getAttribute('aria-controls')!)).toBeInTheDocument();screen.getAllByRole('button',{name:'Sign Out'})[0].focus();fireEvent.keyDown(document.activeElement!,{key:'Escape'});expect(mobile).toHaveFocus();expect(mobile).toHaveAttribute('aria-expanded','false');
+ });
+});
